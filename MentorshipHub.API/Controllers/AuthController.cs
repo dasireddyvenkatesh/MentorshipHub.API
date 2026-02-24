@@ -14,7 +14,7 @@ namespace MentorshipHub.API.Controllers
                 IsSuccess = true,
                 RequiresMfa = true,
                 Token = "dummy-jwt",
-                Ipaddress = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault() ?? string.Empty
+                Ipaddress = HttpContext.Request.Headers["X-Forwarded-For"].ToString().Split(",").FirstOrDefault()?.Trim() ?? string.Empty
             };
             return Ok(loginResponse);
         }
