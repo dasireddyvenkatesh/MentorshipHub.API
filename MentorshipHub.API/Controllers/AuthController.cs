@@ -14,10 +14,19 @@ namespace MentorshipHub.API.Controllers
                 IsSuccess = true,
                 RequiresMfa = true,
                 Token = "dummy-jwt",
-                Ipaddress = HttpContext.Request.Headers["X-Forwarded-For"].ToString()
+                Ipaddress = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault() ?? string.Empty
             };
             return Ok(loginResponse);
         }
+
+        
+        [HttpPost("resend-otp")]
+        public IActionResult ResendOtp([FromBody] string email)
+        {
+            return Ok(new { Message = $"OTP resent to {email}" });
+        }
+
+
 
 
         public class LoginRequest
