@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity.Data;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 
 namespace MentorshipHub.API.Controllers
 {
@@ -8,7 +6,7 @@ namespace MentorshipHub.API.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        [HttpPost("/login")]
+        [HttpPost("login")]
         public IActionResult Login(LoginRequest loginRequest)
         {
             LoginResponse loginResponse = new LoginResponse
