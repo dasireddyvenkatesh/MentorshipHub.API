@@ -7,9 +7,15 @@ namespace MentorshipHub.API.Application.Services.Email
 {
     public class EmailService : IEmailService
     {
+        private readonly IConfiguration _configuration;
+        public EmailService(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
         public async Task<bool> SendEmail(string to, string subject, string body)
         {
-            var apiKey = "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";
+            var apiKey = _configuration["Email:ApiKey"];
 
             EmailMessageModel emailMessage = new EmailMessageModel
             {

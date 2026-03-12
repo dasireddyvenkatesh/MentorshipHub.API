@@ -50,15 +50,15 @@ builder.Services.AddAuthentication(options =>
 .AddGoogle(options =>
 {
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.ClientId = "402494891385-9emk6qdiqmt0lqnoejk6d6a6u1bokql2.apps.googleusercontent.com";
-    options.ClientSecret = "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";
+    options.ClientId = builder.Configuration["Google:ClientId"]!;
+    options.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
     options.ClaimActions.MapJsonKey("picture", "picture", "url");
 })
 .AddGitHub(options =>
 {
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.ClientId = "Ov23liUl6tT4R6c3XsSy";
-    options.ClientSecret = "3b600b03a0ee063cd6043ca5d90aa2229d9ed97b";
+    options.ClientId = builder.Configuration["GitHub:ClientId"]!;
+    options.ClientSecret = builder.Configuration["GitHub:ClientSecret"]!;
     options.Scope.Add("user:email");
     options.ClaimActions.MapJsonKey(ClaimTypes.Email, "email");
     options.ClaimActions.MapJsonKey("avatar_url", "avatar_url");
@@ -67,8 +67,8 @@ builder.Services.AddAuthentication(options =>
 .AddTwitter(options =>
 {
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.ConsumerKey = "6L0VIuXsgAou9PTcP3arEp7Yh";
-    options.ConsumerSecret = "bZVZe0t1Fmz7I4Q1skCiALSTSM48y8FxQHzAQg4zEQsIyKPd5p";
+    options.ConsumerKey = builder.Configuration["Twitter:ClientId"]!;
+    options.ConsumerSecret = builder.Configuration["Twitter:ClientSecret"]!;
     options.RetrieveUserDetails = true;
     options.ClaimActions.MapJsonKey("urn:twitter:profile_image", "profile_image_url_https");
 
@@ -76,8 +76,8 @@ builder.Services.AddAuthentication(options =>
 .AddLinkedIn(options =>
 {
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.ClientId = "77dgvfieesfiqg";
-    options.ClientSecret = "WPL_AP1.VjDRKKVjhORpmw64.B7Ul5g==";
+    options.ClientId = builder.Configuration["LinkedIn:ClientId"]!;
+    options.ClientSecret = builder.Configuration["LinkedIn:ClientSecret"]!;
 
 });
 
