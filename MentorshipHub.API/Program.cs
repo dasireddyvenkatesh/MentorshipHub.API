@@ -1,10 +1,100 @@
-using Microsoft.AspNetCore.HttpOverrides;
+using MentorshipHub.API.Application.Classes.Auth;
+using MentorshipHub.API.Application.Classes.Common;
+using MentorshipHub.API.Application.Interfaces.Auth;
+using MentorshipHub.API.Application.Interfaces.Commom;
+using MentorshipHub.API.Application.Interfaces.Email;
+using MentorshipHub.API.Application.Services.Auth;
+using MentorshipHub.API.Application.Services.Email;
+using MentorshipHub.API.Enities;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+//builder.Services.AddDbContext<AppDbContext>(options =>
+//    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddCookie()
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+    };
+})
+.AddGoogle(options =>
+{
+    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.ClientId = "402494891385-9emk6qdiqmt0lqnoejk6d6a6u1bokql2.apps.googleusercontent.com";
+    options.ClientSecret = "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";
+    options.ClaimActions.MapJsonKey("picture", "picture", "url");
+})
+.AddGitHub(options =>
+{
+    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.ClientId = "Ov23liUl6tT4R6c3XsSy";
+    options.ClientSecret = "3b600b03a0ee063cd6043ca5d90aa2229d9ed97b";
+    options.Scope.Add("user:email");
+    options.ClaimActions.MapJsonKey(ClaimTypes.Email, "email");
+    options.ClaimActions.MapJsonKey("avatar_url", "avatar_url");
+
+})
+.AddTwitter(options =>
+{
+    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.ConsumerKey = "6L0VIuXsgAou9PTcP3arEp7Yh";
+    options.ConsumerSecret = "bZVZe0t1Fmz7I4Q1skCiALSTSM48y8FxQHzAQg4zEQsIyKPd5p";
+    options.RetrieveUserDetails = true;
+    options.ClaimActions.MapJsonKey("urn:twitter:profile_image", "profile_image_url_https");
+
+})
+.AddLinkedIn(options =>
+{
+    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.ClientId = "77dgvfieesfiqg";
+    options.ClientSecret = "WPL_AP1.VjDRKKVjhORpmw64.B7Ul5g==";
+
+});
+
+
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IUserSessionService, UserSessionService>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IOtpService, OtpService>();
+builder.Services.AddScoped<IPublicIdService, SqidsService>();
+builder.Services.AddScoped<IOAuthUserMapper, OAuthUserMapper>();
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddControllers();
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -17,9 +107,16 @@ if (app.Environment.IsDevelopment())
 }
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
-
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+//    db.Database.Migrate();
+//}
 
 app.Run();
