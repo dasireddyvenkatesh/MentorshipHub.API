@@ -20,7 +20,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public string GenerateAccessToken(User user, IList<string> roles, IList<string> permissions)
         {
             var key = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
+                Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
 
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
