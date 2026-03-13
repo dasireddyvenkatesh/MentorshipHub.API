@@ -4,5 +4,6 @@
     {
         (string subject, string body) BuildResendOtp(string name, string code);
         (string subject, string body) BuildRegistrationOtp(string firstName, string otpCode);
+        (string subject, string body) BuildMfaOtp(string firstName, string otpCode);
     }
 }

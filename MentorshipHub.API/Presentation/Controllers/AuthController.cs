@@ -6,11 +6,11 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.Twitter;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MentorshipHub.API.Presentation.Controllers
 {
-
     [Route("api/[controller]")]
     [ApiController]
     public class AuthController : ControllerBase
@@ -19,30 +19,37 @@ namespace MentorshipHub.API.Presentation.Controllers
         private readonly IUserSessionService _userSessionService;
         private readonly IOAuthUserMapper _oauthUserMapper;
 
-        public AuthController(IAuthService authService, IUserSessionService userSessionService, IOAuthUserMapper oauthUserMapper)
+        public AuthController(
+            IAuthService authService,
+            IUserSessionService userSessionService,
+            IOAuthUserMapper oauthUserMapper)
         {
             _authService = authService;
             _userSessionService = userSessionService;
             _oauthUserMapper = oauthUserMapper;
         }
 
-        [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginRequest request)
+        private void SetRefreshTokenCookie(string token)
         {
+            Response.Cookies.Append("refreshToken", token, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                MaxAge = TimeSpan.FromDays(7),
+                IsEssential = true,
+                Path = "/api/auth",
+            });
+        }
 
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        {
             var response = await _authService.LoginAsync(request);
 
-            if (!string.IsNullOrEmpty(response.RefreshToken))
+            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
-                Response.Cookies.Append("refreshToken", response.RefreshToken, new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = true,
-                    SameSite = SameSiteMode.None,
-                    MaxAge = TimeSpan.FromDays(7),
-                    IsEssential = true,
-                    Path = "/api/auth"
-                });
+                SetRefreshTokenCookie(response.RefreshToken);
             }
 
             return Ok(response);
@@ -59,9 +66,13 @@ namespace MentorshipHub.API.Presentation.Controllers
                 LinkedInAuthenticationDefaults.AuthenticationScheme
             };
 
-            provider = schemes.First(s => provider.Equals(s, StringComparison.OrdinalIgnoreCase));
+            var scheme = schemes.FirstOrDefault(s =>
+                s.Equals(provider, StringComparison.OrdinalIgnoreCase));
 
-            var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider });
+            if (scheme == null)
+                return BadRequest("Invalid authentication provider");
+
+            var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider = scheme });
 
             var properties = new AuthenticationProperties
             {
@@ -71,7 +82,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             properties.Items["deviceId"] = deviceId;
             properties.Items["deviceName"] = deviceName;
 
-            return Challenge(properties, provider);
+            return Challenge(properties, scheme);
         }
 
         [HttpGet("{provider}-response")]
@@ -87,11 +98,16 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             var response = await _authService.ExternalLoginAsync(oauthUser);
 
+            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
+            {
+                SetRefreshTokenCookie(response.RefreshToken);
+            }
+
             return Ok(response);
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register(RegisterRequest request)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
             var response = await _authService.RegisterAsync(request);
 
@@ -99,7 +115,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("resend-email-otp")]
-        public async Task<IActionResult> ResendEmailOtp(EmailOtpRequest request)
+        public async Task<IActionResult> ResendEmailOtp([FromBody] EmailOtpRequest request)
         {
             var response = await _authService.ResendEmailOtp(request);
 
@@ -107,26 +123,35 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("request-mfa-otp")]
-        public async Task<IActionResult> MfaOtpRequest(MfaOtpRequest request)
+        public async Task<IActionResult> RequestMfaOtp([FromBody] MfaOtpRequest request)
         {
             var response = await _authService.MfaOtpAsync(request);
 
             return Ok(response);
         }
 
-
         [HttpPost("verify-email-otp")]
-        public async Task<IActionResult> EmailVerficationOtp(VerifyEmailOtpRequest request)
+        public async Task<IActionResult> VerifyEmailOtp([FromBody] VerifyEmailOtpRequest request)
         {
             var response = await _authService.VerifyEmailOtp(request);
+
+            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
+            {
+                SetRefreshTokenCookie(response.RefreshToken);
+            }
 
             return Ok(response);
         }
 
         [HttpPost("verify-mfa-otp")]
-        public async Task<IActionResult> VerifyMfaOtp(VerifyMfaOtpRequest request)
+        public async Task<IActionResult> VerifyMfaOtp([FromBody] VerifyMfaOtpRequest request)
         {
             var response = await _authService.VerifyMfaOtpAsync(request);
+
+            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
+            {
+                SetRefreshTokenCookie(response.RefreshToken);
+            }
 
             return Ok(response);
         }
@@ -134,37 +159,34 @@ namespace MentorshipHub.API.Presentation.Controllers
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken()
         {
-            string refreshToken = Request.Cookies["refreshToken"] ?? string.Empty;
+            var refreshToken = Request.Cookies["refreshToken"];
+
+            if (string.IsNullOrEmpty(refreshToken))
+                return Unauthorized(new { message = "Refresh token missing" });
 
             var result = await _authService.RefreshAsync(refreshToken);
 
-            if (result.response.IsSuccess)
+            if (result.response.IsSuccess && !string.IsNullOrEmpty(result.refreshToken))
             {
-                Response.Cookies.Append("refreshToken", result.refreshToken, new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = true,
-                    SameSite = SameSiteMode.None,
-                    MaxAge = TimeSpan.FromDays(7),
-                    IsEssential = true,
-                    Path = "/api/auth"
-                });
+                SetRefreshTokenCookie(result.refreshToken);
             }
 
-            return Ok(result);
+            return Ok(result.response);
         }
 
+        [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
             var refreshToken = Request.Cookies["refreshToken"];
 
             if (!string.IsNullOrEmpty(refreshToken))
+            {
                 await _userSessionService.RevokeAsync(refreshToken);
+                Response.Cookies.Delete("refreshToken");
+            }
 
-            Response.Cookies.Delete("refreshToken");
-
-            return Ok();
+            return Ok(new { message = "Logged out successfully" });
         }
     }
 }

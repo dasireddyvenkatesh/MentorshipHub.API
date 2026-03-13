@@ -1,4 +1,5 @@
-﻿using MentorshipHub.API.Application.DTO.Auth;
+﻿using Azure;
+using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Email;
 using MentorshipHub.API.Enities;
@@ -15,7 +16,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private readonly IEmailService _emailService;
         private readonly IEmailTemplateService _emailTemplateService;
 
-        public OtpService(IPasswordHasher hasher, AppDbContext db, IEmailService emailService, IEmailTemplateService emailTemplateService)
+        public OtpService(
+            IPasswordHasher hasher,
+            AppDbContext db,
+            IEmailService emailService,
+            IEmailTemplateService emailTemplateService)
         {
             _hasher = hasher;
             _db = db;
@@ -23,35 +28,46 @@ namespace MentorshipHub.API.Application.Classes.Auth
             _emailTemplateService = emailTemplateService;
         }
 
-        public async Task<EmailOtpResponse> GenerateEmailVerificationOtp(string name, string email, bool isResend= false)
+        public async Task<EmailOtpResponse> GenerateEmailVerificationOtp(string name, string email, bool isResend = false)
         {
-            string code = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-
-            string hash = _hasher.Hash(code);
-
             var existing = await _db.EmailVerificationOtps
-                .FirstOrDefaultAsync(x => x.Email == email);
+                .FirstOrDefaultAsync(x => x.Email == email && !x.IsUsed);
 
             if (existing != null)
             {
-                // Resend cooldown protection
-                if (isResend && existing.CreatedAt.AddSeconds(60) > DateTime.UtcNow)
+                if (existing.LockedUntil.HasValue && existing.LockedUntil > DateTime.UtcNow)
                 {
+                    var minutes = (existing.LockedUntil.Value - DateTime.UtcNow).TotalMinutes;
+
                     return new EmailOtpResponse
                     {
-                        Message = "Please wait before requesting another OTP."
+                        IsSuccess = false,
+                        Message = $"Too many failed attempts. Try again in {Math.Ceiling(minutes)} minutes."
                     };
                 }
 
+                if (existing.CreatedAt.AddSeconds(60) > DateTime.UtcNow)
+                {
+                    return new EmailOtpResponse
+                    {
+                        IsSuccess = true,
+                        Message = "OTP already sent. Please check your email."
+                    };
+                }
+            }
+
+            string code = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+            string hash = _hasher.Hash(code);
+
+            if (existing != null)
+            {
                 existing.CodeHash = hash;
-                existing.AttemptCount = 0;
                 existing.ExpiresAt = DateTime.UtcNow.AddMinutes(10);
-                existing.LockedUntil = null;
                 existing.CreatedAt = DateTime.UtcNow;
             }
             else
             {
-                var otp = new EmailVerificationOtp
+                _db.EmailVerificationOtps.Add(new EmailVerificationOtp
                 {
                     Id = Guid.NewGuid(),
                     Email = email,
@@ -60,9 +76,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     MaxAttempts = 5,
                     ExpiresAt = DateTime.UtcNow.AddMinutes(10),
                     CreatedAt = DateTime.UtcNow
-                };
-
-                _db.EmailVerificationOtps.Add(otp);
+                });
             }
 
             await _db.SaveChangesAsync();
@@ -71,70 +85,106 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 ? _emailTemplateService.BuildResendOtp(name, code)
                 : _emailTemplateService.BuildRegistrationOtp(name, code);
 
-            await _emailService.SendEmail(email, template.subject, template.body);
+            var response = await _emailService.SendEmail(email, template.subject, template.body);
+
+            if(!response)
+            {
+                return new EmailOtpResponse
+                {
+                    IsSuccess = false,
+                    Message = "Failed to send OTP email. Please try again later."
+                };
+            }
 
             return new EmailOtpResponse
             {
                 IsSuccess = true,
-                Message = "Verification code sent successfully."
+                Message = "Verification code sent to your email."
             };
         }
-        public async Task<MfaOtpResponse> GenerateMfaOtp(Guid id)
+
+        public async Task<MfaOtpResponse> GenerateMfaOtp(Guid userId)
         {
+            var user = await _db.Users.FindAsync(userId);
 
-            string code = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-
-            string hash = _hasher.Hash(code);
+            if (user == null)
+            {
+                return new MfaOtpResponse
+                {
+                    IsSuccess = false,
+                    Message = "User not found."
+                };
+            }
 
             var existing = await _db.MfaOtps
-                .FirstOrDefaultAsync(x => x.Id == id);
+                .FirstOrDefaultAsync(x => x.UserId == userId && !x.IsUsed);
+
+            if (existing != null)
+            {
+                if (existing.LockedUntil.HasValue && existing.LockedUntil > DateTime.UtcNow)
+                {
+                    var minutes = (existing.LockedUntil.Value - DateTime.UtcNow).TotalMinutes;
+
+                    return new MfaOtpResponse
+                    {
+                        IsSuccess = false,
+                        Message = $"Too many failed attempts. Try again in {Math.Ceiling(minutes)} minutes."
+                    };
+                }
+
+                if (existing.CreatedAt.AddSeconds(60) > DateTime.UtcNow)
+                {
+                    return new MfaOtpResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Please wait before requesting another OTP."
+                    };
+                }
+            }
+
+            string code = RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+            string hash = _hasher.Hash(code);
 
             if (existing != null)
             {
                 existing.CodeHash = hash;
-                existing.AttemptCount = 0;
                 existing.ExpiresAt = DateTime.UtcNow.AddMinutes(10);
-                existing.LockedUntil = null;
+                existing.CreatedAt = DateTime.UtcNow;
             }
             else
             {
-                var otp = new MfaOtp
+                _db.MfaOtps.Add(new MfaOtp
                 {
                     Id = Guid.NewGuid(),
-                    UserId = id,
+                    UserId = userId,
                     CodeHash = hash,
                     AttemptCount = 0,
                     MaxAttempts = 5,
                     ExpiresAt = DateTime.UtcNow.AddMinutes(10),
                     CreatedAt = DateTime.UtcNow
-                };
-
-                _db.MfaOtps.Add(otp);
+                });
             }
 
             await _db.SaveChangesAsync();
 
-            var user = await _db.Users.FindAsync(id);
+            var template = _emailTemplateService.BuildMfaOtp(user.Username, code);
 
-            if(user == null)
+            var response = await _emailService.SendEmail(user.Email, template.subject, template.body);
+
+            if (!response)
             {
                 return new MfaOtpResponse
                 {
                     IsSuccess = false,
-                    Message = "User not found"
+                    Message = "Failed to send OTP email. Please try again later."
                 };
             }
-
-            var template = _emailTemplateService.BuildRegistrationOtp(user.Username, code);
-
-            await _emailService.SendEmail(user.Email, template.subject, template.body);
 
             return new MfaOtpResponse
             {
                 IsSuccess = true,
-                Message = "MFA OTP resent successfully"
+                Message = "Verification code sent to your email."
             };
         }
-
     }
 }
