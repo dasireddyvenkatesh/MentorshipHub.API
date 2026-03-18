@@ -15,9 +15,9 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost]
-        public IActionResult ContactUs(ContactUsRequest request)
+        public async Task<IActionResult> ContactUs(ContactUsRequest request)
         {
-            var response = _contactService.ProcessContactRequest(request);
+            var response = await _contactService.ProcessContactRequest(request);
 
             return Ok(response);
         }

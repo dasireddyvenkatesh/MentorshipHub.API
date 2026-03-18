@@ -179,7 +179,7 @@ namespace MentorshipHub.API.Application.Services.Email
 
             sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
 
-            sb.Append("<h2 style='color:#333;'>New Contact Request</h2>");
+            sb.Append($"<h2 style='color:#333;'>New Contact Request - {subject}</h2>");
 
             sb.Append("<p>You have received a new contact request from the website.</p>");
 
