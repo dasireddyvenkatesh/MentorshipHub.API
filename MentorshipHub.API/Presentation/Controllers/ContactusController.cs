@@ -19,7 +19,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             var response = _contactService.ProcessContactRequest(request);
 
-            return Ok(request);
+            return Ok(response);
         }
     }
 }
