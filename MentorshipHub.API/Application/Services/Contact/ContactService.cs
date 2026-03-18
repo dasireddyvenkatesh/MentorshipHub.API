@@ -46,7 +46,7 @@ namespace MentorshipHub.API.Application.Services.Contact
 
         private async Task<bool> SendSupportEmail(ContactUsRequest request)
         {
-            string to = request.Email;
+            string to = "support@xqare.in";
             string subject = "New Contact Request";
             string body = $"Name: {request.FullName}\nEmail: {request.Email}\nMessage: {request.Message}";
 
