@@ -1,16 +1,19 @@
 ﻿using MentorshipHub.API.Application.DTO.ContactUs;
 using MentorshipHub.API.Application.Interfaces.Contact;
 using MentorshipHub.API.Application.Interfaces.Email;
+using System.Text;
 
 namespace MentorshipHub.API.Application.Services.Contact
 {
     public class ContactService : IContactService
     {
         private readonly IEmailService _emailService;
+        private readonly IEmailTemplateService _emailTemplateService;
 
-        public ContactService(IEmailService emailService)
+        public ContactService(IEmailService emailService, IEmailTemplateService emailTemplateService)
         {
             _emailService = emailService;
+            _emailTemplateService = emailTemplateService;
         }
 
         public async Task<ContactUsResponse> ProcessContactRequest(ContactUsRequest request)
@@ -18,7 +21,7 @@ namespace MentorshipHub.API.Application.Services.Contact
             bool customerResponse = await SendCustomerConfirmation(request);
             bool supportResponse = await SendSupportEmail(request);
 
-            if(customerResponse && supportResponse)
+            if (customerResponse && supportResponse)
             {
                 return new ContactUsResponse
                 {
@@ -36,23 +39,21 @@ namespace MentorshipHub.API.Application.Services.Contact
 
         private async Task<bool> SendCustomerConfirmation(ContactUsRequest request)
         {
-            string to = request.Email;
-            string subject = "We received your request";
-            string body = $"Hi {request.FullName},\n\nThank you for contacting us. Our team will respond soon.";
+            var response = _emailTemplateService.ContactUsCustomerTemplate(request.FullName);
 
-            return await _emailService.SendEmail(to, subject, body);
+            return await _emailService.SendEmail(request.Email, response.subject, response.body);
 
         }
 
         private async Task<bool> SendSupportEmail(ContactUsRequest request)
         {
-            string to = "support@xqare.in";
-            string subject = "New Contact Request";
-            string body = $"Name: {request.FullName}\nEmail: {request.Email}\nMessage: {request.Message}";
+            string email = "support@xqare.in";
 
-            return await _emailService.SendEmail(to, subject, body);
+            var response = _emailTemplateService.ContactUsSupportTemplate(request.FullName, request.Email, request.Subject, request.Message);
 
-            
+            return await _emailService.SendEmail(email, response.subject, response.body);
+
+
         }
     }
 }

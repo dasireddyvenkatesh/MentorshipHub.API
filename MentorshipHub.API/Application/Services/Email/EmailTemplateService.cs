@@ -1,4 +1,5 @@
-﻿using MentorshipHub.API.Application.Interfaces.Email;
+﻿using Azure.Core;
+using MentorshipHub.API.Application.Interfaces.Email;
 using System.Text;
 
 namespace MentorshipHub.API.Application.Services.Email
@@ -121,6 +122,91 @@ namespace MentorshipHub.API.Application.Services.Email
             sb.Append("<br>");
 
             sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+
+            sb.Append("</div>");
+            sb.Append("</body>");
+            sb.Append("</html>");
+
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) ContactUsCustomerTemplate(string firstName)
+        {
+            string subject = "We received your request - XQARE";
+
+            var sb = new StringBuilder();
+
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html>");
+            sb.Append("<body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+
+            sb.Append("<h2 style='color:#333;'>Thank you for contacting us</h2>");
+
+            sb.Append($"<p>Hi {firstName},</p>");
+
+            sb.Append("<p>Thank you for reaching out to <strong>XQARE</strong>. We have received your request and our support team will review it shortly.</p>");
+
+            sb.Append("<p>Our team usually responds within <strong>24 hours</strong>.</p>");
+
+            sb.Append("<p>If your request is urgent, please reply directly to this email.</p>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p style='color:#777;'>This is an automated confirmation email to let you know that your message has been received.</p>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+
+            sb.Append("</div>");
+            sb.Append("</body>");
+            sb.Append("</html>");
+
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) ContactUsSupportTemplate(string firstName, string email, string subject, string message)
+        {
+            subject = $"New Contact Request - {subject}";
+
+            var sb = new StringBuilder();
+
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html>");
+            sb.Append("<body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+
+            sb.Append("<h2 style='color:#333;'>New Contact Request</h2>");
+
+            sb.Append("<p>You have received a new contact request from the website.</p>");
+
+            sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:20px;'>");
+
+            sb.Append("<tr>");
+            sb.Append("<td style='padding:8px;font-weight:bold;'>Name:</td>");
+            sb.Append($"<td style='padding:8px;'>{firstName}</td>");
+            sb.Append("</tr>");
+
+            sb.Append("<tr>");
+            sb.Append("<td style='padding:8px;font-weight:bold;'>Email:</td>");
+            sb.Append($"<td style='padding:8px;'>{email}</td>");
+            sb.Append("</tr>");
+
+            sb.Append("<tr>");
+            sb.Append("<td style='padding:8px;font-weight:bold;'>Message:</td>");
+            sb.Append($"<td style='padding:8px;'>{message}</td>");
+            sb.Append("</tr>");
+
+            sb.Append("</table>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p style='color:#777;'>Please respond to this request as soon as possible.</p>");
+
+            sb.Append("<p>Best regards,<br><strong>XQARE Website</strong></p>");
 
             sb.Append("</div>");
             sb.Append("</body>");
