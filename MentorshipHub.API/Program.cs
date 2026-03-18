@@ -2,8 +2,10 @@ using MentorshipHub.API.Application.Classes.Auth;
 using MentorshipHub.API.Application.Classes.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Commom;
+using MentorshipHub.API.Application.Interfaces.Contact;
 using MentorshipHub.API.Application.Interfaces.Email;
 using MentorshipHub.API.Application.Services.Auth;
+using MentorshipHub.API.Application.Services.Contact;
 using MentorshipHub.API.Application.Services.Email;
 using MentorshipHub.API.Enities;
 using Microsoft.AspNetCore.Authentication;
@@ -91,6 +93,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IPublicIdService, SqidsService>();
 builder.Services.AddScoped<IOAuthUserMapper, OAuthUserMapper>();
+builder.Services.AddScoped<IContactService, ContactService>();
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddControllers();
