@@ -21,8 +21,8 @@ namespace MentorshipHub.API.Application.Services.Email
             {
                 Sender = new EmailMessageModel.SenderInfo
                 {
-                    Email = "noreplyinternalxqare@gmail.com",
-                    Name = "Xqare"
+                    Email = "noreply@xqare.in",
+                    Name = "No Reply"
                 },
                 To = new List<EmailMessageModel.RecipientInfo>
                 {
