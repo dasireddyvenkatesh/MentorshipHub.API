@@ -43,7 +43,6 @@ namespace MentorshipHub.API.Enities
                 entity.Property(x => x.PasswordHash);
 
                 entity.HasIndex(x => x.Email).IsUnique();
-                entity.HasIndex(x => x.Username).IsUnique();
 
                 entity.HasOne(x => x.Profile)
                       .WithOne(x => x.User)

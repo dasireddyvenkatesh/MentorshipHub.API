@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.Twitter;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+using System.Web;
 
 namespace MentorshipHub.API.Presentation.Controllers
 {
@@ -103,7 +105,12 @@ namespace MentorshipHub.API.Presentation.Controllers
                 SetRefreshTokenCookie(response.RefreshToken);
             }
 
-            return Ok(response);
+            var frontendUrl = "https://xqare.azurewebsites.net/login";
+
+            var json = JsonSerializer.Serialize(response);
+            var encoded = HttpUtility.UrlEncode(json);
+
+            return Redirect($"{frontendUrl}?data={encoded}");
         }
 
         [HttpPost("register")]
@@ -187,6 +194,38 @@ namespace MentorshipHub.API.Presentation.Controllers
             }
 
             return Ok(new { message = "Logged out successfully" });
+        }
+
+        [HttpPost("settoken")]
+        public IActionResult SetToken([FromBody] string token)
+        {
+            Response.Cookies.Append("jwtToken", token, new CookieOptions
+            {
+                SameSite = SameSiteMode.Strict,
+                Expires = DateTime.UtcNow.AddDays(1),
+                Secure= true,
+                Path = "/"
+            });
+
+            return Ok();
+        }
+
+        [HttpGet("gettoken")]
+        public IActionResult GetToken()
+        {
+            var refreshToken = Request.Cookies["refreshToken"];
+
+            var jwtToken = Request.Cookies["jwtToken"];
+
+            return Ok(jwtToken);
+        }
+
+        [HttpDelete("deletetoken")]
+        public IActionResult DeleteToken()
+        {
+            Response.Cookies.Delete("refreshToken");
+
+            return Ok();
         }
     }
 }
