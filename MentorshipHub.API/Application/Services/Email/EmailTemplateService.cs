@@ -148,9 +148,7 @@ namespace MentorshipHub.API.Application.Services.Email
 
             sb.Append("<p>Thank you for reaching out to <strong>XQARE</strong>. We have received your request and our support team will review it shortly.</p>");
 
-            sb.Append("<p>Our team usually responds within <strong>24 hours</strong>.</p>");
-
-            sb.Append("<p>If your request is urgent, please reply directly to this email.</p>");
+            sb.Append("<p>Our team usually responds within <strong>24 - 48 hours</strong>.</p>");
 
             sb.Append("<br>");
 
