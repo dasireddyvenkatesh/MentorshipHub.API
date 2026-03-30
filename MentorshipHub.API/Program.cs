@@ -3,9 +3,11 @@ using MentorshipHub.API.Application.Classes.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Commom;
 using MentorshipHub.API.Application.Interfaces.Contact;
+//using MentorshipHub.API.Application.Interfaces.Dashboard;
 using MentorshipHub.API.Application.Interfaces.Email;
 using MentorshipHub.API.Application.Services.Auth;
 using MentorshipHub.API.Application.Services.Contact;
+//using MentorshipHub.API.Application.Services.Dashboard;
 using MentorshipHub.API.Application.Services.Email;
 using MentorshipHub.API.Enities;
 using Microsoft.AspNetCore.Authentication;
@@ -22,7 +24,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    
+options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 //builder.Services.AddDbContext<AppDbContext>(options =>
 //    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -83,6 +86,16 @@ builder.Services.AddAuthentication(options =>
 
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowUI", policy =>
+    {
+        policy.WithOrigins("https://proud-pebble-0f828cd0f.6.azurestaticapps.net")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IUserSessionService, UserSessionService>();
@@ -94,6 +107,7 @@ builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IPublicIdService, SqidsService>();
 builder.Services.AddScoped<IOAuthUserMapper, OAuthUserMapper>();
 builder.Services.AddScoped<IContactService, ContactService>();
+//builder.Services.AddScoped<IGetDashboardService, GetDashboardService>();
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddControllers();
@@ -110,6 +124,7 @@ if (app.Environment.IsDevelopment())
 }
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
+app.UseCors("AllowUI");
 app.UseAuthentication();
 app.UseAuthorization();
 
