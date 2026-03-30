@@ -105,7 +105,7 @@ namespace MentorshipHub.API.Presentation.Controllers
                 SetRefreshTokenCookie(response.RefreshToken);
             }
 
-            var frontendUrl = "https://xqare.azurewebsites.net/login";
+            var frontendUrl = "https://proud-pebble-0f828cd0f.6.azurestaticapps.net/login";
 
             var json = JsonSerializer.Serialize(response);
             var encoded = HttpUtility.UrlEncode(json);
