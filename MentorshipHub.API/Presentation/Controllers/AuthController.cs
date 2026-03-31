@@ -40,7 +40,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             {
                 HttpOnly = true,
                 Secure = true,
-                SameSite = SameSiteMode.Lax,
+                SameSite = SameSiteMode.None,
                 MaxAge = TimeSpan.FromDays(7),
             });
         }
