@@ -90,7 +90,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowUI", policy =>
     {
-        policy.WithOrigins("https://proud-pebble-0f828cd0f.6.azurestaticapps.net")
+        policy.WithOrigins("https://www.xqare.in")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
