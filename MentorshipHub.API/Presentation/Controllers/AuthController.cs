@@ -40,10 +40,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             {
                 HttpOnly = true,
                 Secure = true,
-                SameSite = SameSiteMode.None,
+                SameSite = SameSiteMode.Lax,
                 MaxAge = TimeSpan.FromDays(7),
-                IsEssential = true,
-                Path = "/api/auth",
             });
         }
 

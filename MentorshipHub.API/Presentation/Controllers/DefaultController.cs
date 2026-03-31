@@ -11,11 +11,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             string refreshToken = Request.Cookies["refreshToken"] ?? default!;
 
-            string jwtToken = Request.Cookies["jwtToken"] ?? default!;
-
-            var result = (jwtToken, refreshToken);
-
-            return Ok(result);
+            return Ok(refreshToken);
         }
     }
 }
