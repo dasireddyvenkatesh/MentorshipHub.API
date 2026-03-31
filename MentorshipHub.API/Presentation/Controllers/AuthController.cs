@@ -201,7 +201,9 @@ namespace MentorshipHub.API.Presentation.Controllers
                 });
             }
 
-            return Ok(new { message = "Logged out successfully" });
+            string message = "Logged out successfully";
+
+            return Ok(message);
         }
 
 
