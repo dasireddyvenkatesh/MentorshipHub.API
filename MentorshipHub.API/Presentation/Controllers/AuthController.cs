@@ -193,7 +193,12 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!string.IsNullOrEmpty(refreshToken))
             {
                 await _userSessionService.RevokeAsync(refreshToken);
-                Response.Cookies.Delete("refreshToken");
+                Response.Cookies.Delete("refreshToken", new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = true,
+                    SameSite = SameSiteMode.None,
+                });
             }
 
             return Ok(new { message = "Logged out successfully" });
