@@ -20,15 +20,18 @@ namespace MentorshipHub.API.Presentation.Controllers
         private readonly IAuthService _authService;
         private readonly IUserSessionService _userSessionService;
         private readonly IOAuthUserMapper _oauthUserMapper;
+        private readonly IWebHostEnvironment _env;
 
         public AuthController(
             IAuthService authService,
             IUserSessionService userSessionService,
-            IOAuthUserMapper oauthUserMapper)
+            IOAuthUserMapper oauthUserMapper,
+            IWebHostEnvironment env)
         {
             _authService = authService;
             _userSessionService = userSessionService;
             _oauthUserMapper = oauthUserMapper;
+            _env = env;
         }
 
         private void SetRefreshTokenCookie(string token)
@@ -105,7 +108,9 @@ namespace MentorshipHub.API.Presentation.Controllers
                 SetRefreshTokenCookie(response.RefreshToken);
             }
 
-            var frontendUrl = "https://proud-pebble-0f828cd0f.6.azurestaticapps.net/login";
+            var frontendUrl = _env.IsDevelopment()
+                ? "https://localhost:7161/login"
+                : "https://proud-pebble-0f828cd0f.6.azurestaticapps.net/login";
 
             var json = JsonSerializer.Serialize(response);
             var encoded = HttpUtility.UrlEncode(json);
@@ -196,36 +201,6 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(new { message = "Logged out successfully" });
         }
 
-        [HttpPost("settoken")]
-        public IActionResult SetToken([FromBody] string token)
-        {
-            Response.Cookies.Append("jwtToken", token, new CookieOptions
-            {
-                SameSite = SameSiteMode.Strict,
-                Expires = DateTime.UtcNow.AddDays(1),
-                Secure= true,
-                Path = "/"
-            });
 
-            return Ok();
-        }
-
-        [HttpGet("gettoken")]
-        public IActionResult GetToken()
-        {
-            var refreshToken = Request.Cookies["refreshToken"];
-
-            var jwtToken = Request.Cookies["jwtToken"];
-
-            return Ok(jwtToken);
-        }
-
-        [HttpDelete("deletetoken")]
-        public IActionResult DeleteToken()
-        {
-            Response.Cookies.Delete("refreshToken");
-
-            return Ok();
-        }
     }
 }
