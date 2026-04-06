@@ -270,7 +270,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new VerifyEmailOtpResponse { Message = "OTP expired" };
 
             // Verify OTP
-            if (!_hasher.Verify(otp.CodeHash, request.OtpCode))
+            if (!_hasher.Verify(request.OtpCode, otp.CodeHash))
             {
                 otp.AttemptCount++;
 
