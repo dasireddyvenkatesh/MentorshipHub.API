@@ -140,6 +140,14 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(response);
         }
 
+        [HttpPost("verify-register-email-otp")]
+        public async Task<IActionResult> VerifyRegisterEmailOtp([FromBody] VerifyEmailOtpRequest request)
+        {
+            var response = await _authService.VerifyRegisterEmailOtp(request);
+
+            return Ok(response);
+        }
+
         [HttpPost("verify-email-otp")]
         public async Task<IActionResult> VerifyEmailOtp([FromBody] VerifyEmailOtpRequest request)
         {

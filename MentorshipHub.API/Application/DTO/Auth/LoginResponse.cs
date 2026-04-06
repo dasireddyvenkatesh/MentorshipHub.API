@@ -7,7 +7,7 @@ namespace MentorshipHub.API.Application.DTO.Auth
         public bool RequiresEmailVerification { get; set; }
         public bool RequiresMfa { get; set; }
 
-        public string? AccessToken { get; set; }
+        public string AccessToken { get; set; } = default!;
 
         public string RefreshToken { get; set; } = default!;
 

@@ -9,6 +9,7 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task<LoginResponse> VerifyMfaOtpAsync(VerifyMfaOtpRequest request);
         Task<(RefreshTokenResponse response, string refreshToken)> RefreshAsync(string refreshToken);
         Task<LoginResponse> VerifyEmailOtp(VerifyEmailOtpRequest request);
+        Task<VerifyEmailOtpResponse> VerifyRegisterEmailOtp(VerifyEmailOtpRequest request);
         Task<MfaOtpResponse> MfaOtpAsync(MfaOtpRequest request);
         Task<RegisterResponse> RegisterAsync(RegisterRequest request);
         Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request);

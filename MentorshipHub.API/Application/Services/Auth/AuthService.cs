@@ -137,7 +137,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 IsSuccess = response.IsSuccess,
                 Email = user.Email,
-                Message = response.Message
+                Message = response.Message,
+                RequiresEmailVerification = true
             };
         }
 
@@ -246,6 +247,59 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         }
 
+        public async Task<VerifyEmailOtpResponse> VerifyRegisterEmailOtp(VerifyEmailOtpRequest request)
+        {
+            var otp = await _db.EmailVerificationOtps
+                .FirstOrDefaultAsync(x => x.Email == request.Email);
+
+            if (otp == null)
+                return new VerifyEmailOtpResponse { Message = "OTP not found" };
+
+            // Handle lock
+            if (otp.LockedUntil.HasValue)
+            {
+                if (otp.LockedUntil > DateTime.UtcNow)
+                    return new VerifyEmailOtpResponse { Message = "Account locked temporarily" };
+
+                // lock expired
+                otp.AttemptCount = 0;
+                otp.LockedUntil = null;
+            }
+
+            if (otp.ExpiresAt < DateTime.UtcNow)
+                return new VerifyEmailOtpResponse { Message = "OTP expired" };
+
+            // Verify OTP
+            if (!_hasher.Verify(otp.CodeHash, request.OtpCode))
+            {
+                otp.AttemptCount++;
+
+                if (otp.AttemptCount >= otp.MaxAttempts)
+                    otp.LockedUntil = DateTime.UtcNow.AddHours(24);
+
+                await _db.SaveChangesAsync();
+
+                return new VerifyEmailOtpResponse { Message = "Invalid OTP" };
+
+            }
+
+            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email == request.Email);
+
+            if (user == null)
+                return new VerifyEmailOtpResponse { Message = "User not found" };
+
+            user.IsEmailConfirmed = true;
+
+            await _db.SaveChangesAsync();
+
+            return new VerifyEmailOtpResponse
+            {
+                IsSuccess = true,
+                Message = "Email verified successfully"
+            };
+
+        }
+
         public async Task<LoginResponse> VerifyEmailOtp(VerifyEmailOtpRequest request)
         {
             var otp = await _db.EmailVerificationOtps
@@ -269,7 +323,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse { Message = "OTP expired" };
 
             // Verify OTP
-            if (!_hasher.Verify(request.Code, otp.CodeHash))
+            if (!_hasher.Verify(request.OtpCode, otp.CodeHash))
             {
                 otp.AttemptCount++;
 
