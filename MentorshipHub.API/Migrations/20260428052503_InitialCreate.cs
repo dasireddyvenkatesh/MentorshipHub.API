@@ -314,12 +314,6 @@ namespace MentorshipHub.API.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Users_Username",
-                table: "Users",
-                column: "Username",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_UserSessions_UserId",
                 table: "UserSessions",
                 column: "UserId");

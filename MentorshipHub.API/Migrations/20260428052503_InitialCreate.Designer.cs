@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MentorshipHub.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260311105207_InitialCreate")]
+    [Migration("20260428052503_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -193,9 +193,6 @@ namespace MentorshipHub.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.HasIndex("Username")
                         .IsUnique();
 
                     b.ToTable("Users");
