@@ -137,6 +137,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("request-mfa-otp")]
+        [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> RequestMfaOtp([FromBody] MfaOtpRequest request)
         {
             var response = await _authService.MfaOtpAsync(request);
@@ -145,14 +146,21 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("verify-register-email-otp")]
+        [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> VerifyRegisterEmailOtp([FromBody] VerifyEmailOtpRequest request)
         {
             var response = await _authService.VerifyRegisterEmailOtp(request);
+
+            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
+            {
+                SetRefreshTokenCookie(response.RefreshToken);
+            }
 
             return Ok(response);
         }
 
         [HttpPost("verify-email-otp")]
+        [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> VerifyEmailOtp([FromBody] VerifyEmailOtpRequest request)
         {
             var response = await _authService.VerifyEmailOtp(request);
@@ -166,6 +174,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("verify-mfa-otp")]
+        [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> VerifyMfaOtp([FromBody] VerifyMfaOtpRequest request)
         {
             var response = await _authService.VerifyMfaOtpAsync(request);
