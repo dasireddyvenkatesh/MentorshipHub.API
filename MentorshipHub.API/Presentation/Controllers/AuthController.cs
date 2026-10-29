@@ -46,6 +46,15 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         private void SetRefreshTokenCookie(string token)
         {
+            // Remove any root-scoped cookie issued by an earlier sandbox version.
+            Response.Cookies.Delete("refreshToken", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/"
+            });
+
             Response.Cookies.Append("refreshToken", token, RefreshTokenCookieOptions());
         }
 
