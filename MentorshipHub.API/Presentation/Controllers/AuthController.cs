@@ -105,6 +105,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
                 SetRefreshTokenCookie(response.RefreshToken);
+                // The refresh token is cookie-only; never expose it in the JSON body.
+                response.RefreshToken = string.Empty;
             }
 
             return Ok(response);
@@ -220,6 +222,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
                 SetRefreshTokenCookie(response.RefreshToken);
+                // The refresh token is cookie-only; never expose it in the JSON body.
+                response.RefreshToken = string.Empty;
             }
 
             return Ok(response);
@@ -234,6 +238,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
                 SetRefreshTokenCookie(response.RefreshToken);
+                // The refresh token is cookie-only; never expose it in the JSON body.
+                response.RefreshToken = string.Empty;
             }
 
             return Ok(response);
@@ -248,6 +254,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
                 SetRefreshTokenCookie(response.RefreshToken);
+                // The refresh token is cookie-only; never expose it in the JSON body.
+                response.RefreshToken = string.Empty;
             }
 
             return Ok(response);
