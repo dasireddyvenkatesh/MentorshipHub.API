@@ -14,5 +14,10 @@ namespace MentorshipHub.API.Infrastructure.EntityModels.Identity
         public DateTime? LockedUntil { get; set; }
 
         public bool IsUsed { get; set; }
+
+        public int HourlySendCount { get; set; }
+        public DateTime? HourlyWindowStartedAt { get; set; }
+        public int DailySendCount { get; set; }
+        public DateTime? DailyWindowStartedAt { get; set; }
     }
 }
