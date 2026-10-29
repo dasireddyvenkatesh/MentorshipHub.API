@@ -90,7 +90,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowUI", policy =>
     {
-        policy.WithOrigins("https://localhost:7161")
+        policy.WithOrigins(
+                "https://localhost:7161",
+                "https://sandbox.xqare.in",
+                "https://www.sandbox.xqare.in")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
