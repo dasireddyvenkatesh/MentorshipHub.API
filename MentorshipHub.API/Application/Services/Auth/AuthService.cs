@@ -6,6 +6,7 @@ using MentorshipHub.API.Infrastructure.EntityModels.Identity;
 using MentorshipHub.API.Infrastructure.EntityModels.Profile;
 using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using System.ComponentModel.DataAnnotations;
 
 namespace MentorshipHub.API.Application.Classes.Auth
@@ -89,30 +90,21 @@ namespace MentorshipHub.API.Application.Classes.Auth
             request.FullName = request.FullName.Trim();
             var email = request.Email.Trim().ToLowerInvariant();
 
+            // Match historical email casing as well as newly normalized addresses.
             var existingUser = await _db.Users
-                .FirstOrDefaultAsync(x => x.Email == email);
+                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (existingUser != null)
+                return await ContinueExistingRegistrationAsync(existingUser);
+
+            // Do not create accounts without the required default role.
+            var memberRole = await _db.Roles.FirstOrDefaultAsync(x => x.Code == "MEMBER");
+            if (memberRole == null)
             {
-                // Allow an unverified account to resume registration by resending its verification OTP.
-                if (!existingUser.IsEmailConfirmed)
-                {
-                    var otpResponse = await _otp.GenerateEmailVerificationOtp(
-                        existingUser.Username, existingUser.Email, true);
-
-                    return new RegisterResponse
-                    {
-                        IsSuccess = otpResponse.IsSuccess,
-                        Email = existingUser.Email,
-                        Message = otpResponse.Message,
-                        RequiresEmailVerification = true
-                    };
-                }
-
                 return new RegisterResponse
                 {
                     IsSuccess = false,
-                    Message = "Email already registered"
+                    Message = "The default Member role is not configured. Please contact support."
                 };
             }
 
@@ -128,36 +120,42 @@ namespace MentorshipHub.API.Application.Classes.Auth
             };
 
             await _db.Users.AddAsync(user);
-
             await _db.UserProfiles.AddAsync(new UserProfile
             {
                 UserId = user.Id,
                 FirstName = string.Empty,
                 LastName = string.Empty,
             });
-
             await _db.UserSecuritySettings.AddAsync(new UserSecuritySetting
             {
                 UserId = user.Id,
                 MfaEnabled = false
             });
-
-            var role = await _db.Roles
-                .FirstOrDefaultAsync(x => x.Name == "Member");
-
-            if (role != null)
+            await _db.UserRoles.AddAsync(new UserRole
             {
-                await _db.UserRoles.AddAsync(new UserRole
-                {
-                    UserId = user.Id,
-                    RoleId = role.Id
-                });
+                UserId = user.Id,
+                RoleId = memberRole.Id
+            });
+
+            try
+            {
+                // SaveChanges wraps these inserts in one transaction.
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                // A concurrent request may have registered this email after the first lookup.
+                _db.ChangeTracker.Clear();
+                var racedUser = await _db.Users
+                    .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
+
+                if (racedUser == null)
+                    throw;
+
+                return await ContinueExistingRegistrationAsync(racedUser);
             }
 
-            await _db.SaveChangesAsync();
-
             var response = await _otp.GenerateEmailVerificationOtp(user.Username, user.Email);
-
             return new RegisterResponse
             {
                 IsSuccess = response.IsSuccess,
@@ -167,7 +165,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             };
         }
 
-        public async Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request)
+                public async Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request)
         {
             var email = request.Email.Trim().ToLower();
 
