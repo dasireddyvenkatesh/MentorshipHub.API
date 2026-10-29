@@ -60,6 +60,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (session == null) return;
 
             session.IsRevoked = true;
+            session.RevokedAt = DateTime.UtcNow;
+            session.LastActivityAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
         }
