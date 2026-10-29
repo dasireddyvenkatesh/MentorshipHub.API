@@ -87,7 +87,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         // for cookie-authenticated POSTs to reduce cross-site request forgery risk.
         private bool HasTrustedBrowserOrigin()
         {
-            var origin = Request.Headers.Origin.ToString();
+            var origin = Request.Headers["Origin"].ToString();
             if (string.IsNullOrWhiteSpace(origin))
                 return true; // Non-browser clients do not normally send Origin.
 
