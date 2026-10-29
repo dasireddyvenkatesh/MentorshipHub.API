@@ -109,7 +109,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                         IpAddress = ipAddress,
                         UserAgent = userAgent,
                         RefreshTokenHash = _jwt.Hash(refreshToken),
-                        ExpiresAt = DateTime.UtcNow.AddDays(7)
+                        ExpiresAt = DateTime.UtcNow.Add(RefreshWindow)
                     });
                 }
             }
@@ -118,12 +118,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 await _db.UserSessions.AddAsync(new UserSession
                 {
                     UserId = userId,
+                    CreatedAt = DateTime.UtcNow,
                     DeviceId = request.DeviceId,
                     DeviceName = request.DeviceName ?? string.Empty,
                     IpAddress = ipAddress,
                     UserAgent = userAgent,
                     RefreshTokenHash = _jwt.Hash(refreshToken),
-                    ExpiresAt = DateTime.UtcNow.AddDays(7)
+                    ExpiresAt = DateTime.UtcNow.Add(RefreshWindow)
                 });
             }
 
