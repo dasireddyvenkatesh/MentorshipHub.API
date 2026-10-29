@@ -32,7 +32,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
-            var email = request.Email.ToLower().Trim();
+            if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password))
+                return new LoginResponse { IsSuccess = false, Message = "Email and password are required." };
+
+            var email = request.Email.Trim().ToLowerInvariant();
 
             var user = await _db.Users
                 .Include(x => x.SecuritySetting)
