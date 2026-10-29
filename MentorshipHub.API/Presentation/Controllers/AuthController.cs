@@ -39,7 +39,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.None,
-            Path = "/",
+            // Scope the refresh cookie to authentication endpoints only.
+            Path = "/api/auth",
             MaxAge = TimeSpan.FromDays(7)
         };
 
@@ -50,6 +51,15 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         private void ClearRefreshTokenCookie()
         {
+            // Clear both the legacy default path (/api/auth) and root-path cookies
+            // issued during the sandbox rollout, so duplicate cookie names cannot linger.
+            Response.Cookies.Delete("refreshToken", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/api/auth"
+            });
             Response.Cookies.Delete("refreshToken", new CookieOptions
             {
                 HttpOnly = true,
