@@ -274,7 +274,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (otp.LockedUntil.HasValue)
             {
                 if (otp.LockedUntil > DateTime.UtcNow)
-                    return new VerifyEmailOtpResponse { Message = "Account locked temporarily" };
+                {
+                    var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - DateTime.UtcNow).TotalMinutes);
+                    return new VerifyEmailOtpResponse { Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
+                }
 
                 // lock expired
                 otp.AttemptCount = 0;
@@ -290,7 +293,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 otp.AttemptCount++;
 
                 if (otp.AttemptCount >= otp.MaxAttempts)
+                {
                     otp.LockedUntil = DateTime.UtcNow.AddHours(24);
+                }
 
                 await _db.SaveChangesAsync();
 
@@ -327,7 +332,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (otp.LockedUntil.HasValue)
             {
                 if (otp.LockedUntil > DateTime.UtcNow)
-                    return new LoginResponse { Message = "Account locked temporarily" };
+                {
+                    var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - DateTime.UtcNow).TotalMinutes);
+                    return new LoginResponse { Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
+                }
 
                 // lock expired
                 otp.AttemptCount = 0;
@@ -343,7 +351,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 otp.AttemptCount++;
 
                 if (otp.AttemptCount >= otp.MaxAttempts)
+                {
                     otp.LockedUntil = DateTime.UtcNow.AddHours(24);
+                }
 
                 await _db.SaveChangesAsync();
 
@@ -381,7 +391,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (otp.LockedUntil.HasValue)
             {
                 if (otp.LockedUntil > DateTime.UtcNow)
-                    return new LoginResponse { Message = "Account locked temporarily" };
+                {
+                    var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - DateTime.UtcNow).TotalMinutes);
+                    return new LoginResponse { Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
+                }
 
                 // lock expired
                 otp.AttemptCount = 0;
@@ -397,7 +410,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 otp.AttemptCount++;
 
                 if (otp.AttemptCount >= otp.MaxAttempts)
+                {
                     otp.LockedUntil = DateTime.UtcNow.AddHours(24);
+                }
 
                 await _db.SaveChangesAsync();
 
