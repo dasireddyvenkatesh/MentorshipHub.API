@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.Twitter;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Text.Json;
 using System.Web;
 
@@ -46,6 +47,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("login")]
+        [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
             var response = await _authService.LoginAsync(request);
@@ -117,6 +119,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("register")]
+        [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
             var response = await _authService.RegisterAsync(request);
@@ -125,6 +128,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("resend-email-otp")]
+        [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> ResendEmailOtp([FromBody] EmailOtpRequest request)
         {
             var response = await _authService.ResendEmailOtp(request);
