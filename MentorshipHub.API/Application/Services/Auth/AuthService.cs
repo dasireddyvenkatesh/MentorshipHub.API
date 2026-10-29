@@ -40,13 +40,17 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             var user = await _db.Users
                 .Include(x => x.SecuritySetting)
-                .FirstOrDefaultAsync(x => x.Email == email);
+                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (user == null || user.PasswordHash == null || !_hasher.Verify(user.PasswordHash, request.Password))
                 return new LoginResponse { IsSuccess = false, Message = "Invalid email or password." };
 
             if (!user.IsActive)
                 return new LoginResponse { IsSuccess = false, Message = "Account is inactive." };
+
+            var relatedRecordsError = await EnsureUserRelatedRecordsAsync(user);
+            if (relatedRecordsError != null)
+                return new LoginResponse { IsSuccess = false, Message = relatedRecordsError };
 
             // EMAIL VERIFICATION
             if (!user.IsEmailConfirmed)
@@ -167,7 +171,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
                 public async Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request)
         {
-            var email = request.Email.Trim().ToLower();
+            var email = request.Email.Trim().ToLowerInvariant();
 
             // 1️⃣ Check if this external provider is already linked
             var externalLogin = await _db.ExternalLogins
@@ -189,11 +193,17 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 // 2️⃣ Check if a user already exists with this email
                  user = await _db.Users
                     .Include(x => x.SecuritySetting)
-                    .FirstOrDefaultAsync(x => x.Email == email);
+                    .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
                 if (user == null)
                 {
-                    user = await CreateNewUserAsync(request, email);
+                    var memberRole = await _db.Roles.FirstOrDefaultAsync(x => x.Code == "MEMBER");
+                    if (memberRole == null)
+                    {
+                        return new LoginResponse { IsSuccess = false, Message = "The default Member role is not configured. Please contact support." };
+                    }
+
+                    user = await CreateNewUserAsync(request, email, memberRole);
                 }
 
                 // 3️⃣ Link the external provider
@@ -219,6 +229,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     Message = "Account is inactive"
                 };
             }
+
+            var relatedRecordsError = await EnsureUserRelatedRecordsAsync(user);
+            if (relatedRecordsError != null)
+                return new LoginResponse { IsSuccess = false, Message = relatedRecordsError };
 
             if (user.SecuritySetting?.MfaEnabled == true)
             {
@@ -250,7 +264,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(email))
                 return new EmailOtpResponse { IsSuccess = false, Message = "Enter a valid email address." };
 
-            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email == email);
+            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (user == null)
             {
@@ -555,6 +569,88 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return (response, newRefresh);
         }
 
+        private async Task<RegisterResponse> ContinueExistingRegistrationAsync(User existingUser)
+        {
+            if (existingUser.IsEmailConfirmed)
+            {
+                return new RegisterResponse
+                {
+                    IsSuccess = false,
+                    Email = existingUser.Email,
+                    Message = "Email already registered"
+                };
+            }
+
+            var repairError = await EnsureUserRelatedRecordsAsync(existingUser);
+            if (repairError != null)
+                return new RegisterResponse { IsSuccess = false, Email = existingUser.Email, Message = repairError };
+
+            var otpResponse = await _otp.GenerateEmailVerificationOtp(
+                existingUser.Username, existingUser.Email, true);
+            return new RegisterResponse
+            {
+                IsSuccess = otpResponse.IsSuccess,
+                Email = existingUser.Email,
+                Message = otpResponse.Message,
+                RequiresEmailVerification = true
+            };
+        }
+
+        // Repairs missing child rows when development/test data cleanup left Users behind.
+        // Existing roles are preserved; only role-less users receive Member.
+        private async Task<string?> EnsureUserRelatedRecordsAsync(User user)
+        {
+            if (!await _db.UserRoles.AnyAsync(x => x.UserId == user.Id))
+            {
+                var memberRole = await _db.Roles.FirstOrDefaultAsync(x => x.Code == "MEMBER");
+                if (memberRole == null)
+                    return "The default Member role is not configured. Please contact support.";
+
+                _db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = memberRole.Id });
+            }
+
+            if (!await _db.UserProfiles.AnyAsync(x => x.UserId == user.Id))
+            {
+                var profile = new UserProfile
+                {
+                    UserId = user.Id,
+                    FirstName = string.Empty,
+                    LastName = string.Empty
+                };
+                _db.UserProfiles.Add(profile);
+                user.Profile = profile;
+            }
+
+            if (!await _db.UserSecuritySettings.AnyAsync(x => x.UserId == user.Id))
+            {
+                var setting = new UserSecuritySetting { UserId = user.Id, MfaEnabled = false };
+                _db.UserSecuritySettings.Add(setting);
+                user.SecuritySetting = setting;
+            }
+            else if (user.SecuritySetting == null)
+            {
+                user.SecuritySetting = await _db.UserSecuritySettings
+                    .FirstOrDefaultAsync(x => x.UserId == user.Id);
+            }
+
+            if (_db.ChangeTracker.HasChanges())
+                await _db.SaveChangesAsync();
+
+            return null;
+        }
+
+        private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        {
+            for (var current = exception.InnerException; current != null; current = current.InnerException)
+            {
+                if (current is PostgresException postgresException &&
+                    postgresException.SqlState == PostgresErrorCodes.UniqueViolation)
+                    return true;
+            }
+
+            return false;
+        }
+
         private static string? ValidateRegistrationRequest(RegisterRequest request)
         {
             if (request == null)
@@ -583,7 +679,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return null;
         }
 
-        private async Task<User> CreateNewUserAsync(ExternalLoginRequest request, string email)
+        private async Task<User> CreateNewUserAsync(ExternalLoginRequest request, string email, Role memberRole)
         {
             var user = new User
             {
@@ -612,17 +708,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 MfaEnabled = false
             });
 
-            var role = await _db.Roles
-                .FirstOrDefaultAsync(x => x.Code == "MEMBER");
-
-            if (role != null)
+            await _db.UserRoles.AddAsync(new UserRole
             {
-                await _db.UserRoles.AddAsync(new UserRole
-                {
-                    UserId = user.Id,
-                    RoleId = role.Id
-                });
-            }
+                UserId = user.Id,
+                RoleId = memberRole.Id
+            });
 
             await _db.SaveChangesAsync();
 
