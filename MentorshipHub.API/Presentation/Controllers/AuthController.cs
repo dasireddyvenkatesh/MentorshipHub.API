@@ -83,6 +83,19 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Redirect(url);
         }
 
+        // CORS controls whether a browser can read a response; validate Origin as well
+        // for cookie-authenticated POSTs to reduce cross-site request forgery risk.
+        private bool HasTrustedBrowserOrigin()
+        {
+            var origin = Request.Headers.Origin.ToString();
+            if (string.IsNullOrWhiteSpace(origin))
+                return true; // Non-browser clients do not normally send Origin.
+
+            return string.Equals(origin, "https://sandbox.xqare.in", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(origin, "https://www.sandbox.xqare.in", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(origin, "https://localhost:7161", StringComparison.OrdinalIgnoreCase);
+        }
+
         [HttpPost("login")]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -243,6 +256,9 @@ namespace MentorshipHub.API.Presentation.Controllers
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken()
         {
+            if (!HasTrustedBrowserOrigin())
+                return StatusCode(StatusCodes.Status403Forbidden, new { isSuccess = false, message = "Untrusted request origin." });
+
             var refreshToken = Request.Cookies["refreshToken"];
             if (string.IsNullOrWhiteSpace(refreshToken))
             {
@@ -265,6 +281,9 @@ namespace MentorshipHub.API.Presentation.Controllers
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
+            if (!HasTrustedBrowserOrigin())
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Untrusted request origin." });
+
             var refreshToken = Request.Cookies["refreshToken"];
             if (!string.IsNullOrWhiteSpace(refreshToken))
                 await _userSessionService.RevokeAsync(refreshToken);
