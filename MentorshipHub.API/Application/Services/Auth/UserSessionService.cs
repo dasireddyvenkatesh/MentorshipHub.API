@@ -8,6 +8,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
 {
     public class UserSessionService : IUserSessionService
     {
+        private static readonly TimeSpan RefreshWindow = TimeSpan.FromDays(7);
+        private static readonly TimeSpan MaximumSessionAge = TimeSpan.FromDays(30);
         private readonly AppDbContext _db;
         private readonly IJwtTokenService _jwt;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -36,9 +38,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task RotateAsync(UserSession session, string newRefreshToken)
         {
+            var now = DateTime.UtcNow;
+            var absoluteExpiry = session.CreatedAt.Add(MaximumSessionAge);
+
             session.RefreshTokenHash = _jwt.Hash(newRefreshToken);
-            session.ExpiresAt = DateTime.UtcNow.AddDays(7);
-            session.LastActivityAt = DateTime.UtcNow;
+            session.ExpiresAt = now.Add(RefreshWindow) < absoluteExpiry
+                ? now.Add(RefreshWindow)
+                : absoluteExpiry;
+            session.LastActivityAt = now;
 
             await _db.SaveChangesAsync();
         }
@@ -78,8 +85,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 {
 
                     // SAME DEVICE → UPDATE
+                    var now = DateTime.UtcNow;
+                    // A fresh credential login starts a new maximum-age window.
+                    existingSession.CreatedAt = now;
                     existingSession.RefreshTokenHash = _jwt.Hash(refreshToken);
-                    existingSession.ExpiresAt = DateTime.UtcNow.AddDays(7);
+                    existingSession.ExpiresAt = now.Add(RefreshWindow);
                     existingSession.IpAddress = ipAddress;
                     existingSession.UserAgent = userAgent;
                     existingSession.LastActivityAt = DateTime.UtcNow;
@@ -93,6 +103,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     await _db.UserSessions.AddAsync(new UserSession
                     {
                         UserId = userId,
+                        CreatedAt = DateTime.UtcNow,
                         DeviceId = request.DeviceId,
                         DeviceName = request.DeviceName ?? string.Empty,
                         IpAddress = ipAddress,
