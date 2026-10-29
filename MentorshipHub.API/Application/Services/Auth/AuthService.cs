@@ -217,7 +217,24 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 };
 
                 await _db.ExternalLogins.AddAsync(newExternalLogin);
-                await _db.SaveChangesAsync();
+                try
+                {
+                    await _db.SaveChangesAsync();
+                }
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                {
+                    // A second OAuth callback may have inserted the provider link concurrently.
+                    _db.ChangeTracker.Clear();
+                    externalLogin = await _db.ExternalLogins
+                        .Include(x => x.User)
+                        .ThenInclude(x => x.SecuritySetting)
+                        .FirstOrDefaultAsync(x => x.Provider == request.Provider && x.ProviderUserId == request.ProviderId);
+
+                    if (externalLogin == null)
+                        throw;
+
+                    user = externalLogin.User;
+                }
             }
 
             // 4️⃣ Prevent login if account inactive
@@ -306,7 +323,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse { IsSuccess = false, Message = "Email and verification code are required." };
 
             var now = DateTime.UtcNow;
-            var otp = await _db.EmailVerificationOtps.FirstOrDefaultAsync(x => x.Email == email);
+            var otp = await _db.EmailVerificationOtps.FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (otp == null)
                 return new LoginResponse { IsSuccess = false, Message = "OTP not found. Request a new verification code." };
