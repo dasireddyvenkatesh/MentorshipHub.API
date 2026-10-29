@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.Twitter;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.WebUtilities;
 using System.Text.Json;
 using System.Web;
 
@@ -35,15 +36,43 @@ namespace MentorshipHub.API.Presentation.Controllers
             _env = env;
         }
 
+        private static CookieOptions RefreshTokenCookieOptions() => new()
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.None,
+            Path = "/",
+            MaxAge = TimeSpan.FromDays(7)
+        };
+
         private void SetRefreshTokenCookie(string token)
         {
-            Response.Cookies.Append("refreshToken", token, new CookieOptions
+            Response.Cookies.Append("refreshToken", token, RefreshTokenCookieOptions());
+        }
+
+        private void ClearRefreshTokenCookie()
+        {
+            Response.Cookies.Delete("refreshToken", new CookieOptions
             {
                 HttpOnly = true,
                 Secure = true,
                 SameSite = SameSiteMode.None,
-                MaxAge = TimeSpan.FromDays(7),
+                Path = "/"
             });
+        }
+
+        private string FrontendLoginUrl() => _env.IsDevelopment()
+            ? "https://localhost:7161/login"
+            : "https://sandbox.xqare.in/login";
+
+        private IActionResult ExternalLoginFailure(string message)
+        {
+            var url = QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
+            {
+                ["externalLogin"] = "failed",
+                ["message"] = message
+            });
+            return Redirect(url);
         }
 
         [HttpPost("login")]
@@ -96,26 +125,42 @@ namespace MentorshipHub.API.Presentation.Controllers
             var result = await HttpContext.AuthenticateAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme);
 
-            if (!result.Succeeded)
-                return Unauthorized();
+            if (!result.Succeeded || result.Principal == null || result.Properties == null)
+            {
+                await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return ExternalLoginFailure("External sign-in failed. Please try again.");
+            }
 
             var oauthUser = _oauthUserMapper.Map(provider, result.Principal, result.Properties);
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+            // Fail closed when the provider does not supply a usable email/identity.
+            if (string.IsNullOrWhiteSpace(oauthUser.Email) ||
+                string.IsNullOrWhiteSpace(oauthUser.ProviderId))
+            {
+                return ExternalLoginFailure("The provider did not return a usable email and account identifier.");
+            }
 
             var response = await _authService.ExternalLoginAsync(oauthUser);
 
-            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
+            if (response.IsSuccess && !string.IsNullOrWhiteSpace(response.RefreshToken))
             {
                 SetRefreshTokenCookie(response.RefreshToken);
+                // Never place access or refresh tokens in URL/query strings.
+                return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), "externalLogin", "success"));
             }
 
-            var frontendUrl = _env.IsDevelopment()
-                ? "https://localhost:7161/login"
-                : "https://sandbox.xqare.in/login";
+            if (response.IsSuccess && response.RequiresMfa && response.UserId.HasValue)
+            {
+                return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
+                {
+                    ["mfaUserId"] = response.UserId.Value.ToString(),
+                    ["email"] = response.Email ?? oauthUser.Email,
+                    ["message"] = response.Message ?? "Enter your MFA code to finish signing in."
+                }));
+            }
 
-            var json = JsonSerializer.Serialize(response);
-            var encoded = HttpUtility.UrlEncode(json);
-
-            return Redirect($"{frontendUrl}?data={encoded}");
+            return ExternalLoginFailure(response.Message ?? "External sign-in failed. Please try again.");
         }
 
         [HttpPost("register")]
@@ -191,40 +236,34 @@ namespace MentorshipHub.API.Presentation.Controllers
         public async Task<IActionResult> RefreshToken()
         {
             var refreshToken = Request.Cookies["refreshToken"];
-
-            if (string.IsNullOrEmpty(refreshToken))
-                return Unauthorized(new { message = "Refresh token missing" });
-
-            var result = await _authService.RefreshAsync(refreshToken);
-
-            if (result.response.IsSuccess && !string.IsNullOrEmpty(result.refreshToken))
+            if (string.IsNullOrWhiteSpace(refreshToken))
             {
-                SetRefreshTokenCookie(result.refreshToken);
+                ClearRefreshTokenCookie();
+                return Unauthorized(new { isSuccess = false, message = "Refresh token missing. Please sign in again." });
             }
 
-            return Ok(result.response);
+            var result = await _authService.RefreshAsync(refreshToken);
+            if (result.response.IsSuccess && !string.IsNullOrWhiteSpace(result.refreshToken))
+            {
+                SetRefreshTokenCookie(result.refreshToken);
+                return Ok(result.response);
+            }
+
+            ClearRefreshTokenCookie();
+            return Unauthorized(result.response);
         }
 
-        [Authorize]
+        [AllowAnonymous]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
             var refreshToken = Request.Cookies["refreshToken"];
-
-            if (!string.IsNullOrEmpty(refreshToken))
-            {
+            if (!string.IsNullOrWhiteSpace(refreshToken))
                 await _userSessionService.RevokeAsync(refreshToken);
-                Response.Cookies.Delete("refreshToken", new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = true,
-                    SameSite = SameSiteMode.None,
-                });
-            }
 
-            string message = "Logged out successfully";
-
-            return Ok(message);
+            // Always clear the cookie, even when the access token/session has already expired.
+            ClearRefreshTokenCookie();
+            return Ok(new { message = "Logged out successfully" });
         }
 
 
