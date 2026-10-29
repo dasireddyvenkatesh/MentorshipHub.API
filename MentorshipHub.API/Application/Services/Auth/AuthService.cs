@@ -271,10 +271,20 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<MfaOtpResponse> MfaOtpAsync(MfaOtpRequest request)
         {
-            var response = await _otp.GenerateMfaOtp(request.Id);
+            if (request == null || request.Id == Guid.Empty)
+                return new MfaOtpResponse { IsSuccess = false, Message = "A valid MFA session is required." };
 
-            return response;
+            var user = await _db.Users
+                .Include(x => x.SecuritySetting)
+                .FirstOrDefaultAsync(x => x.Id == request.Id);
 
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed ||
+                user.SecuritySetting?.MfaEnabled != true)
+            {
+                return new MfaOtpResponse { IsSuccess = false, Message = "MFA is not enabled for this account." };
+            }
+
+            return await _otp.GenerateMfaOtp(user.Id);
         }
 
         public async Task<LoginResponse> VerifyRegisterEmailOtp(VerifyEmailOtpRequest request)
@@ -451,6 +461,16 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (request.UserId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
                 return new LoginResponse { IsSuccess = false, Message = "User and verification code are required." };
 
+            var user = await _db.Users
+                .Include(x => x.SecuritySetting)
+                .FirstOrDefaultAsync(x => x.Id == request.UserId);
+
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed ||
+                user.SecuritySetting?.MfaEnabled != true)
+            {
+                return new LoginResponse { IsSuccess = false, Message = "MFA is not enabled for this account." };
+            }
+
             var now = DateTime.UtcNow;
             var otp = await _db.MfaOtps
                 .Where(x => x.UserId == request.UserId && !x.IsUsed)
@@ -475,7 +495,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (otp.ExpiresAt <= now)
                 return new LoginResponse { IsSuccess = false, Message = "OTP expired. Request a new verification code." };
 
-            // Verify takes (storedHash, candidateValue).
             if (!_hasher.Verify(otp.CodeHash, request.Code))
             {
                 otp.AttemptCount++;
@@ -491,13 +510,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 await _db.SaveChangesAsync();
                 return new LoginResponse { IsSuccess = false, Message = $"Invalid OTP. {remainingAttempts} attempt(s) remaining." };
             }
-
-            var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == request.UserId);
-            if (user == null)
-                return new LoginResponse { IsSuccess = false, Message = "User not found." };
-
-            if (!user.IsActive)
-                return new LoginResponse { IsSuccess = false, Message = "Account is inactive." };
 
             otp.IsUsed = true;
             await _db.SaveChangesAsync();
