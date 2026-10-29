@@ -170,6 +170,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (existing != null)
             {
                 existing.CodeHash = hash;
+                existing.AttemptCount = 0;
+                existing.MaxAttempts = 5;
+                existing.LockedUntil = null;
+                existing.IsUsed = false;
                 existing.ExpiresAt = DateTime.UtcNow.AddMinutes(10);
                 existing.CreatedAt = DateTime.UtcNow;
             }
