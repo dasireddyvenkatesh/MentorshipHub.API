@@ -285,7 +285,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new VerifyEmailOtpResponse { Message = "OTP expired" };
 
             // Verify OTP
-            if (!_hasher.Verify(request.OtpCode, otp.CodeHash))
+            if (!_hasher.Verify(otp.CodeHash, request.OtpCode))
             {
                 otp.AttemptCount++;
 
@@ -338,7 +338,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse { Message = "OTP expired" };
 
             // Verify OTP
-            if (!_hasher.Verify(request.OtpCode, otp.CodeHash))
+            if (!_hasher.Verify(otp.CodeHash, request.OtpCode))
             {
                 otp.AttemptCount++;
 
