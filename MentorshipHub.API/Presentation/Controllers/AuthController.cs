@@ -10,8 +10,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.WebUtilities;
-using System.Text.Json;
-using System.Web;
 
 namespace MentorshipHub.API.Presentation.Controllers
 {
