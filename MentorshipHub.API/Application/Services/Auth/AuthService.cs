@@ -568,18 +568,28 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<(RefreshTokenResponse response, string refreshToken)> RefreshAsync(string refreshToken)
         {
-            if(string.IsNullOrEmpty(refreshToken))
-                return (new RefreshTokenResponse { Message = "Refresh token missing" }, default!);
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return (new RefreshTokenResponse { IsSuccess = false, Message = "Refresh token missing" }, default!);
 
             var session = await _sessions.GetByTokenAsync(refreshToken);
+            var now = DateTime.UtcNow;
 
-            if (session == null || session.IsRevoked || session.ExpiresAt < DateTime.UtcNow)
-                return (new RefreshTokenResponse { Message = "Login expired" }, default!);
+            if (session == null || session.IsRevoked || session.ExpiresAt <= now)
+                return (new RefreshTokenResponse { IsSuccess = false, Message = "Login expired. Please sign in again." }, default!);
+
+            // Enforce a maximum session lifetime in addition to the sliding seven-day window.
+            if (session.CreatedAt.AddDays(30) <= now)
+            {
+                session.IsRevoked = true;
+                session.RevokedAt = now;
+                await _db.SaveChangesAsync();
+                return (new RefreshTokenResponse { IsSuccess = false, Message = "Maximum session age reached. Please sign in again." }, default!);
+            }
 
             var user = await _db.Users.FindAsync(session.UserId);
 
-            if(user == null || !user.IsActive)
-                return (new RefreshTokenResponse { Message = "Account is inactive" }, default!);
+            if (user == null || !user.IsActive)
+                return (new RefreshTokenResponse { IsSuccess = false, Message = "Account is inactive. Please sign in again." }, default!);
 
             var roles = await GetRoles(user.Id);
             var permissions = await GetPermissions(user.Id);
