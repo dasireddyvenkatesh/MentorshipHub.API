@@ -48,6 +48,18 @@ namespace MentorshipHub.API.Migrations
                     b.Property<bool>("IsUsed")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("HourlySendCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("HourlyWindowStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DailySendCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DailyWindowStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LockedUntil")
                         .HasColumnType("timestamp with time zone");
 
