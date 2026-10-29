@@ -110,7 +110,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             var frontendUrl = _env.IsDevelopment()
                 ? "https://localhost:7161/login"
-                : "https://www.xqare.in/login";
+                : "https://sandbox.xqare.in/login";
 
             var json = JsonSerializer.Serialize(response);
             var encoded = HttpUtility.UrlEncode(json);
