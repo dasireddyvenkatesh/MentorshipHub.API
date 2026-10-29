@@ -6,8 +6,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace MentorshipHub.API.Migrations
 {
-    [DbContext(typeof(AppDbContext))]
-    [Migration("20261029173000_HardenRegistrationAndOtpUniqueness")]
     public partial class HardenRegistrationAndOtpUniqueness : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
