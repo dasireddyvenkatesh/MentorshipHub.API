@@ -68,6 +68,10 @@ namespace MentorshipHub.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("IX_EmailVerificationOtps_Email");
+
                     b.ToTable("EmailVerificationOtps");
                 });
 
@@ -134,7 +138,10 @@ namespace MentorshipHub.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("\"IsUsed\" = FALSE")
+                        .HasDatabaseName("IX_MfaOtps_UserId_Active");
 
                     b.ToTable("MfaOtps");
                 });
