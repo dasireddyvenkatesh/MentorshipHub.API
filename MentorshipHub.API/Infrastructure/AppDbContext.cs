@@ -88,11 +88,22 @@ namespace MentorshipHub.API.Enities
                 entity.Property(x => x.ProfileImageUrl);
             });
 
+            builder.Entity<EmailVerificationOtp>()
+                .HasIndex(x => x.Email)
+                .IsUnique()
+                .HasDatabaseName("IX_EmailVerificationOtps_Email");
+
             builder.Entity<UserSession>()
                 .HasKey(x => x.Id);
 
-            builder.Entity<MfaOtp>()
-                .HasKey(x => x.Id);
+            builder.Entity<MfaOtp>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.UserId)
+                    .IsUnique()
+                    .HasFilter("\"IsUsed\" = FALSE")
+                    .HasDatabaseName("IX_MfaOtps_UserId_Active");
+            });
 
             builder.Entity<MfaOtp>()
                 .HasOne(x => x.User)
