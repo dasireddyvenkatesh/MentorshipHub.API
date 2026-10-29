@@ -84,6 +84,21 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             if (existingUser != null)
             {
+                // Allow an unverified account to resume registration by resending its verification OTP.
+                if (!existingUser.IsEmailConfirmed)
+                {
+                    var otpResponse = await _otp.GenerateEmailVerificationOtp(
+                        existingUser.Username, existingUser.Email, true);
+
+                    return new RegisterResponse
+                    {
+                        IsSuccess = otpResponse.IsSuccess,
+                        Email = existingUser.Email,
+                        Message = otpResponse.Message,
+                        RequiresEmailVerification = true
+                    };
+                }
+
                 return new RegisterResponse
                 {
                     IsSuccess = false,
@@ -270,7 +285,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new VerifyEmailOtpResponse { Message = "OTP expired" };
 
             // Verify OTP
-            if (!_hasher.Verify(otp.CodeHash, request.OtpCode))
+            if (!_hasher.Verify(request.OtpCode, otp.CodeHash))
             {
                 otp.AttemptCount++;
 
