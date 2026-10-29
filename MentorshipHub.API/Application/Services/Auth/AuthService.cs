@@ -248,7 +248,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<EmailOtpResponse> ResendEmailOtp(EmailOtpRequest request)
         {
-            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email == request.Email);
+            var email = request?.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(email))
+                return new EmailOtpResponse { IsSuccess = false, Message = "Enter a valid email address." };
+
+            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email == email);
 
             if (user == null)
             {
@@ -259,7 +263,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 };
             }
 
-            var response = await _otp.GenerateEmailVerificationOtp(user.Username, request.Email, true);
+            var response = await _otp.GenerateEmailVerificationOtp(user.Username, user.Email, true);
 
             return response;
 
