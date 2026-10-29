@@ -203,7 +203,21 @@ namespace MentorshipHub.API.Application.Classes.Auth
                         return new LoginResponse { IsSuccess = false, Message = "The default Member role is not configured. Please contact support." };
                     }
 
-                    user = await CreateNewUserAsync(request, email, memberRole);
+                    try
+                    {
+                        user = await CreateNewUserAsync(request, email, memberRole);
+                    }
+                    catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                    {
+                        // Another OAuth callback may have created this email just before this request.
+                        _db.ChangeTracker.Clear();
+                        user = await _db.Users
+                            .Include(x => x.SecuritySetting)
+                            .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
+
+                        if (user == null)
+                            throw;
+                    }
                 }
 
                 // 3️⃣ Link the external provider
