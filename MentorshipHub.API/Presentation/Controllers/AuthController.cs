@@ -263,7 +263,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             // Always clear the cookie, even when the access token/session has already expired.
             ClearRefreshTokenCookie();
-            return Ok(new { message = "Logged out successfully" });
+            return Ok("Logged out successfully");
         }
 
 
