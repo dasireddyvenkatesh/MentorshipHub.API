@@ -827,24 +827,19 @@ namespace MentorshipHub.API.Application.Classes.Auth
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            if (user.SecuritySetting?.MfaEnabled == true)
-            {
-                var mfaResponse = await _otp.GenerateMfaOtp(user.Id);
-                return new LoginResponse
-                {
-                    IsSuccess = mfaResponse.IsSuccess,
-                    RequiresMfa = mfaResponse.IsSuccess,
-                    UserId = user.Id,
-                    Email = user.Email,
-                    Message = mfaResponse.Message
-                };
-            }
-
             var loginRequest = new LoginRequest
             {
                 DeviceId = request.DeviceId ?? string.Empty,
                 DeviceName = request.DeviceName
             };
+
+            if (user.SecuritySetting?.MfaEnabled == true)
+            {
+                var mfaResponse = await CreateMfaChallengeAsync(user, loginRequest);
+                if (mfaResponse.IsSuccess)
+                    mfaResponse.Message = "Email verified successfully. " + mfaResponse.Message;
+                return mfaResponse;
+            }
 
             var sessionResponse = await CreateSession(user, loginRequest);
             sessionResponse.Message = "Email verified successfully. " + sessionResponse.Message;
@@ -920,91 +915,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
             user.IsEmailConfirmed = true;
             await _db.SaveChangesAsync();
 
+            var loginRequest = new LoginRequest
+            {
+                DeviceId = request.DeviceId ?? string.Empty,
+                DeviceName = request.DeviceName
+            };
+
             if (user.SecuritySetting?.MfaEnabled == true)
-            {
-                var mfaResponse = await _otp.GenerateMfaOtp(user.Id);
-                return new LoginResponse
-                {
-                    IsSuccess = mfaResponse.IsSuccess,
-                    RequiresMfa = mfaResponse.IsSuccess,
-                    UserId = user.Id,
-                    Email = user.Email,
-                    Message = mfaResponse.Message
-                };
-            }
-
-            var loginRequest = new LoginRequest
-            {
-                DeviceId = request.DeviceId ?? string.Empty,
-                DeviceName = request.DeviceName
-            };
-
-            return await CreateSession(user, loginRequest);
-        }
-
-        public async Task<LoginResponse> VerifyMfaOtpAsync(VerifyMfaOtpRequest request)
-        {
-            if (request.UserId == Guid.Empty || string.IsNullOrWhiteSpace(request.Code))
-                return new LoginResponse { IsSuccess = false, Message = "User and verification code are required." };
-
-            var user = await _db.Users
-                .Include(x => x.SecuritySetting)
-                .FirstOrDefaultAsync(x => x.Id == request.UserId);
-
-            if (user == null || !user.IsActive || !user.IsEmailConfirmed ||
-                user.SecuritySetting?.MfaEnabled != true)
-            {
-                return new LoginResponse { IsSuccess = false, Message = "MFA is not enabled for this account." };
-            }
-
-            var now = DateTime.UtcNow;
-            var otp = await _db.MfaOtps
-                .Where(x => x.UserId == request.UserId && !x.IsUsed)
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            if (otp == null)
-                return new LoginResponse { IsSuccess = false, Message = "OTP not found or already used. Request a new verification code." };
-
-            if (otp.LockedUntil.HasValue)
-            {
-                if (otp.LockedUntil.Value > now)
-                {
-                    var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - now).TotalMinutes);
-                    return new LoginResponse { IsSuccess = false, Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
-                }
-
-                otp.AttemptCount = 0;
-                otp.LockedUntil = null;
-            }
-
-            if (otp.ExpiresAt <= now)
-                return new LoginResponse { IsSuccess = false, Message = "OTP expired. Request a new verification code." };
-
-            if (!_hasher.Verify(otp.CodeHash, request.Code))
-            {
-                otp.AttemptCount++;
-                var remainingAttempts = Math.Max(0, otp.MaxAttempts - otp.AttemptCount);
-
-                if (otp.AttemptCount >= otp.MaxAttempts)
-                {
-                    otp.LockedUntil = now.AddHours(24);
-                    await _db.SaveChangesAsync();
-                    return new LoginResponse { IsSuccess = false, Message = "Too many incorrect attempts. Try again in 24 hours." };
-                }
-
-                await _db.SaveChangesAsync();
-                return new LoginResponse { IsSuccess = false, Message = $"Invalid OTP. {remainingAttempts} attempt(s) remaining." };
-            }
-
-            otp.IsUsed = true;
-            await _db.SaveChangesAsync();
-
-            var loginRequest = new LoginRequest
-            {
-                DeviceId = request.DeviceId ?? string.Empty,
-                DeviceName = request.DeviceName
-            };
+                return await CreateMfaChallengeAsync(user, loginRequest);
 
             return await CreateSession(user, loginRequest);
         }
