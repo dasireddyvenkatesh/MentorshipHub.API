@@ -19,6 +19,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
+using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,6 +62,7 @@ builder.Services.AddAuthentication(options =>
     options.ClientId = builder.Configuration["Google:ClientId"]!;
     options.ClientSecret = builder.Configuration["Google:ClientSecret"]!;
     options.ClaimActions.MapJsonKey("picture", "picture", "url");
+    options.ClaimActions.MapJsonKey("email_verified", "email_verified");
 })
 .AddGitHub(options =>
 {
@@ -69,6 +72,55 @@ builder.Services.AddAuthentication(options =>
     options.Scope.Add("user:email");
     options.ClaimActions.MapJsonKey(ClaimTypes.Email, "email");
     options.ClaimActions.MapJsonKey("avatar_url", "avatar_url");
+
+    // GitHub's profile endpoint does not reliably expose whether its email is verified.
+    // Read the user's authorized email list and select a verified address explicitly.
+    options.Events.OnCreatingTicket += async context =>
+    {
+        using var emailRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user/emails");
+        emailRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        emailRequest.Headers.UserAgent.ParseAdd("XQARE");
+        emailRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", context.AccessToken);
+
+        using var emailResponse = await context.Backchannel.SendAsync(
+            emailRequest, context.HttpContext.RequestAborted);
+        emailResponse.EnsureSuccessStatusCode();
+
+        await using var emailStream = await emailResponse.Content.ReadAsStreamAsync(
+            context.HttpContext.RequestAborted);
+        using var emailDocument = await JsonDocument.ParseAsync(
+            emailStream, cancellationToken: context.HttpContext.RequestAborted);
+
+        string? verifiedEmail = null;
+        foreach (var item in emailDocument.RootElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("verified", out var verified) ||
+                verified.ValueKind != JsonValueKind.True ||
+                !item.TryGetProperty("email", out var emailElement) ||
+                string.IsNullOrWhiteSpace(emailElement.GetString()))
+            {
+                continue;
+            }
+
+            verifiedEmail = emailElement.GetString();
+            if (item.TryGetProperty("primary", out var primary) &&
+                primary.ValueKind == JsonValueKind.True)
+            {
+                break;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(verifiedEmail) &&
+            context.Principal?.Identity is ClaimsIdentity identity)
+        {
+            foreach (var existingEmailClaim in identity.FindAll(ClaimTypes.Email).ToList())
+                identity.RemoveClaim(existingEmailClaim);
+
+            identity.AddClaim(new Claim(ClaimTypes.Email, verifiedEmail));
+            identity.AddClaim(new Claim("email_verified", "true"));
+        }
+    };
 
 })
 .AddTwitter(options =>
@@ -85,6 +137,7 @@ builder.Services.AddAuthentication(options =>
     options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     options.ClientId = builder.Configuration["LinkedIn:ClientId"]!;
     options.ClientSecret = builder.Configuration["LinkedIn:ClientSecret"]!;
+    options.ClaimActions.MapJsonKey("email_verified", "email_verified");
 
 });
 
