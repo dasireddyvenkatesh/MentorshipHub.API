@@ -39,7 +39,7 @@ namespace MentorshipHub.API.Migrations
                     ) THEN
                         RAISE EXCEPTION 'MFA-enabled accounts without an active TOTP credential remain. Resolve these accounts before applying the authentication cutover.';
                     END IF;
-                END $;
+                END $$;
                 """);
 
             // Global sign-out: all users must authenticate again after deployment.
