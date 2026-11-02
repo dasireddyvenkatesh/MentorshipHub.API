@@ -9,5 +9,6 @@
         public string Avatar { get; set; }
         public string DeviceId { get; set; }
         public string DeviceName { get; set; }
+        public bool EmailVerified { get; set; }
     }
 }
