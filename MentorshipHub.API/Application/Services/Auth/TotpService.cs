@@ -38,7 +38,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new TotpEnrollmentStartResponse
                 {
                     IsSuccess = false,
-                    Message = "Authenticator enrollment is unavailable until the server's Data Protection key ring is configured with a certificate."
+                    Message = "Authenticator enrollment is unavailable until a valid AES-256 TOTP encryption key is configured in the API application settings."
                 };
             }
 
@@ -59,7 +59,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 credential = new TotpCredential
                 {
                     UserId = userId, IsEnabled = false,
-                    PendingEncryptedSecret = _protector.Protect(secret),
+                    PendingEncryptedSecret = _protector.Protect(secret, userId),
                     PendingEnrollmentExpiresAt = now.AddMinutes(10)
                 };
                 _db.TotpCredentials.Add(credential);
@@ -106,7 +106,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now)
                 return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Authenticator setup is temporarily locked. Try again later." };
 
-            var matchedStep = FindMatchingTimeStep(_protector.Unprotect(credential.PendingEncryptedSecret), code, now);
+            var matchedStep = FindMatchingTimeStep(_protector.Unprotect(credential.PendingEncryptedSecret, userId), code, now);
             if (matchedStep == null)
             {
                 RegisterFailedAttempt(credential, now);
@@ -121,7 +121,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 };
             }
 
-            credential.EncryptedSecret = credential.PendingEncryptedSecret;
+            credential.EncryptedSecret = _protector.Protect(secret, userId);
             credential.PendingEncryptedSecret = null;
             credential.PendingEnrollmentExpiresAt = null;
             credential.IsEnabled = true;
@@ -191,9 +191,15 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now)
                 return new TotpVerificationResult(false, "Authenticator verification is temporarily locked. Try again later.");
 
-            var step = FindMatchingTimeStep(_protector.Unprotect(credential.EncryptedSecret), code, now);
+            var encryptedSecret = credential.EncryptedSecret;
+            var secret = _protector.Unprotect(encryptedSecret, userId);
+            var step = FindMatchingTimeStep(secret, code, now);
+            var needsReprotection = !_protector.IsUsingActiveKey(encryptedSecret);
             if (step == null || (credential.LastAcceptedTimeStep.HasValue && step.Value <= credential.LastAcceptedTimeStep.Value))
             {
+                if (needsReprotection)
+                    credential.EncryptedSecret = _protector.Protect(secret, userId);
+
                 RegisterFailedAttempt(credential, now);
                 await _db.SaveChangesAsync();
                 if (transaction != null) await transaction.CommitAsync();
@@ -202,6 +208,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                         ? "Too many incorrect codes. Authenticator verification is temporarily locked."
                         : "The authenticator code is invalid or has already been used.");
             }
+
+            if (needsReprotection)
+                credential.EncryptedSecret = _protector.Protect(secret, userId);
 
             credential.LastAcceptedTimeStep = step.Value;
             credential.FailedAttemptCount = 0;
