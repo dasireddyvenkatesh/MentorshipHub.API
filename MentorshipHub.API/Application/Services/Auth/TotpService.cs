@@ -33,6 +33,15 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<TotpEnrollmentStartResponse> StartEnrollmentAsync(Guid userId, string email, bool allowReplace = false)
         {
+            if (!_protector.IsProtectionConfigured)
+            {
+                return new TotpEnrollmentStartResponse
+                {
+                    IsSuccess = false,
+                    Message = "Authenticator enrollment is unavailable until the server's Data Protection key ring is configured with a certificate."
+                };
+            }
+
             await using var transaction = await BeginTransactionIfNeededAsync();
             var lockKey = "totp:" + userId.ToString("N");
             await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
