@@ -17,6 +17,8 @@ namespace MentorshipHub.API.Presentation.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
+        private const string RefreshTokenCookieName = "xqare_refresh_v2";
+        private const string MfaChallengeCookieName = "xqare_mfa_challenge_v2";
         private readonly IAuthService _authService;
         private readonly IUserSessionService _userSessionService;
         private readonly IOAuthUserMapper _oauthUserMapper;
@@ -45,18 +47,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         };
 
         private void SetRefreshTokenCookie(string token)
-        {
-            // Remove any root-scoped cookie issued by an earlier sandbox version.
-            Response.Cookies.Delete("refreshToken", new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.None,
-                Path = "/"
-            });
-
-            Response.Cookies.Append("refreshToken", token, RefreshTokenCookieOptions());
-        }
+            => Response.Cookies.Append(RefreshTokenCookieName, token, RefreshTokenCookieOptions());
 
         private static CookieOptions MfaChallengeCookieOptions() => new()
         {
@@ -64,32 +55,21 @@ namespace MentorshipHub.API.Presentation.Controllers
             Path = "/api/auth", MaxAge = TimeSpan.FromMinutes(5)
         };
         private void SetMfaChallengeCookie(string token)
-            => Response.Cookies.Append("xqare_mfa_challenge", token, MfaChallengeCookieOptions());
+            => Response.Cookies.Append(MfaChallengeCookieName, token, MfaChallengeCookieOptions());
         private void ClearMfaChallengeCookie()
-            => Response.Cookies.Delete("xqare_mfa_challenge", new CookieOptions
+            => Response.Cookies.Delete(MfaChallengeCookieName, new CookieOptions
             { HttpOnly = true, Secure = true, SameSite = SameSiteMode.None, Path = "/api/auth" });
         private Guid? CurrentUserId()
             => Guid.TryParse(User.FindFirst("uid")?.Value, out var userId) ? userId : null;
 
         private void ClearRefreshTokenCookie()
-        {
-            // Clear both the legacy default path (/api/auth) and root-path cookies
-            // issued during the sandbox rollout, so duplicate cookie names cannot linger.
-            Response.Cookies.Delete("refreshToken", new CookieOptions
+            => Response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions
             {
                 HttpOnly = true,
                 Secure = true,
                 SameSite = SameSiteMode.None,
                 Path = "/api/auth"
             });
-            Response.Cookies.Delete("refreshToken", new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.None,
-                Path = "/"
-            });
-        }
 
         private string FrontendLoginUrl() => _env.IsDevelopment()
             ? "https://localhost:7161/login"
@@ -259,7 +239,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> VerifyMfaChallenge([FromBody] VerifyMfaChallengeRequest request)
         {
-            var token = Request.Cookies["xqare_mfa_challenge"];
+            var token = Request.Cookies[MfaChallengeCookieName];
             if (string.IsNullOrWhiteSpace(token))
                 return Unauthorized(new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
             return await CompleteMfaVerificationAsync(request, token);
@@ -376,7 +356,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!HasTrustedBrowserOrigin())
                 return StatusCode(StatusCodes.Status403Forbidden, new { isSuccess = false, message = "Untrusted request origin." });
 
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshTokenCookieName];
             if (string.IsNullOrWhiteSpace(refreshToken))
             {
                 ClearRefreshTokenCookie();
@@ -401,7 +381,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!HasTrustedBrowserOrigin())
                 return StatusCode(StatusCodes.Status403Forbidden, new { message = "Untrusted request origin." });
 
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshTokenCookieName];
             if (!string.IsNullOrWhiteSpace(refreshToken))
                 await _userSessionService.RevokeAsync(refreshToken);
 
