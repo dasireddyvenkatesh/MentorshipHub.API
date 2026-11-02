@@ -26,7 +26,20 @@ namespace MentorshipHub.API.Migrations
                     ) THEN
                         RAISE EXCEPTION 'Legacy TOTP secrets remain. Resolve these credentials before applying the authentication cutover.';
                     END IF;
-                END $$;
+                    IF EXISTS (
+                        SELECT 1
+                        FROM "UserSecuritySettings" s
+                        WHERE s."MfaEnabled" = TRUE
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM "TotpCredentials" t
+                              WHERE t."UserId" = s."UserId"
+                                AND t."IsEnabled" = TRUE
+                          )
+                    ) THEN
+                        RAISE EXCEPTION 'MFA-enabled accounts without an active TOTP credential remain. Resolve these accounts before applying the authentication cutover.';
+                    END IF;
+                END $;
                 """);
 
             // Global sign-out: all users must authenticate again after deployment.
@@ -50,6 +63,12 @@ namespace MentorshipHub.API.Migrations
                     "PendingEnrollmentExpiresAt" = NULL
                 WHERE "PendingEncryptedSecret" IS NOT NULL
                    OR "PendingEnrollmentExpiresAt" IS NOT NULL;
+                """);
+
+            migrationBuilder.Sql("""
+                UPDATE "TotpCredentials"
+                SET "EncryptedSecret" = NULL
+                WHERE "IsEnabled" = FALSE AND "EncryptedSecret" IS NOT NULL;
                 """);
 
             // Remove the table used only by email-as-login-MFA.
