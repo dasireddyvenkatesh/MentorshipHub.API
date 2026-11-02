@@ -105,6 +105,28 @@ namespace MentorshipHub.API.Presentation.Controllers
                 || string.Equals(origin, "https://localhost:7161", StringComparison.OrdinalIgnoreCase);
         }
 
+        [AllowAnonymous]
+        [HttpPost("forgot-password")]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            var response = await _authService.RequestPasswordResetAsync(request);
+            return Ok(response);
+        }
+
+        [AllowAnonymous]
+        [HttpPost("reset-password")]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            var response = await _authService.ResetPasswordAsync(request);
+
+            if (response.IsSuccess)
+                ClearRefreshTokenCookie();
+
+            return Ok(response);
+        }
+
         [HttpPost("login")]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
