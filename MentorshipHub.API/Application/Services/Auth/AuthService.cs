@@ -239,11 +239,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             var email = request.Email.Trim().ToLowerInvariant();
 
-            var user = await _db.Users
-                .Include(x => x.SecuritySetting)
-                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
-
-            if (user == null || user.PasswordHash == null || !_hasher.Verify(user.PasswordHash, request.Password))
+            var passwordValidation = await ValidatePasswordWithLockoutAsync(email, request.Password);
+            var user = passwordValidation.User;
+            if (!passwordValidation.IsValid || user == null)
                 return new LoginResponse { IsSuccess = false, Message = "Invalid email or password." };
 
             if (!user.IsActive)
@@ -273,6 +271,79 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return await CreateSession(user, request);
         }
 
+
+        private async Task<(User? User, bool IsValid)> ValidatePasswordWithLockoutAsync(string email, string password)
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var lockKey = "login:" + email;
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
+            var user = await _db.Users
+                .Include(x => x.SecuritySetting)
+                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
+
+            // Unknown addresses remain indistinguishable from invalid passwords.
+            // The existing IP rate limiter remains the coarse control for unknown accounts.
+            if (user == null || string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                await transaction.CommitAsync();
+                return (null, false);
+            }
+
+            var security = user.SecuritySetting;
+            if (security == null)
+            {
+                security = new UserSecuritySetting { UserId = user.Id, MfaEnabled = false };
+                _db.UserSecuritySettings.Add(security);
+                user.SecuritySetting = security;
+            }
+
+            var now = DateTime.UtcNow;
+            if (security.LockoutEnd.HasValue && security.LockoutEnd.Value > now)
+            {
+                await transaction.CommitAsync();
+                return (null, false);
+            }
+
+            if (!_hasher.Verify(user.PasswordHash, password))
+            {
+                if (!security.FailedLoginWindowStartedAt.HasValue ||
+                    security.FailedLoginWindowStartedAt.Value.AddMinutes(15) <= now)
+                {
+                    security.FailedLoginWindowStartedAt = now;
+                    security.AccessFailedCount = 0;
+                }
+
+                security.AccessFailedCount++;
+                if (security.AccessFailedCount >= 5)
+                {
+                    security.LockoutLevel = Math.Min(3, security.LockoutLevel + 1);
+                    var lockoutMinutes = security.LockoutLevel switch
+                    {
+                        1 => 15,
+                        2 => 30,
+                        _ => 60
+                    };
+                    security.LockoutEnd = now.AddMinutes(lockoutMinutes);
+                    security.AccessFailedCount = 0;
+                    security.FailedLoginWindowStartedAt = now;
+                }
+
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return (null, false);
+            }
+
+            // A successful primary factor resets consecutive password failures.
+            security.AccessFailedCount = 0;
+            security.LockoutEnd = null;
+            security.FailedLoginWindowStartedAt = null;
+            security.LockoutLevel = 0;
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return (user, true);
+        }
 
         public async Task<RegisterResponse> RegisterAsync(RegisterRequest request)
         {
@@ -1010,7 +1081,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             await _sessions.RotateAsync(session, newRefresh);
 
-            var accessToken = _jwt.GenerateAccessToken(user, roles, permissions);
+            var accessToken = _jwt.GenerateAccessToken(user, roles, permissions, session.Id);
 
             var response = new RefreshTokenResponse
             {
@@ -1206,10 +1277,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var roles = await GetRoles(user.Id);
             var permissions = await GetPermissions(user.Id);
 
-            var accessToken = _jwt.GenerateAccessToken(user, roles, permissions);
             var refreshToken = _jwt.GenerateRefreshToken();
-
-            await _sessions.HandleLoginSessionAsync(user.Id, request, refreshToken);
+            var sessionId = await _sessions.HandleLoginSessionAsync(user.Id, request, refreshToken);
+            var accessToken = _jwt.GenerateAccessToken(user, roles, permissions, sessionId);
 
             return new LoginResponse
             {
