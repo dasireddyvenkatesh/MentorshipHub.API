@@ -7,6 +7,7 @@ using MentorshipHub.API.Enities;
 using MentorshipHub.API.Infrastructure.EntityModels.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using QRCoder;
 
 namespace MentorshipHub.API.Application.Classes.Auth
 {
@@ -66,10 +67,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var label = Uri.EscapeDataString($"{Issuer}:{email.Trim()}");
             var issuer = Uri.EscapeDataString(Issuer);
             var uri = $"otpauth://totp/{label}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30";
+            var qrGenerator = new QRCodeGenerator();
+            var qrData = qrGenerator.CreateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
+            var qrBytes = new PngByteQRCode(qrData).GetGraphic(8);
+            var qrDataUri = "data:image/png;base64," + Convert.ToBase64String(qrBytes);
             return new TotpEnrollmentStartResponse
             {
                 IsSuccess = true, Message = "Scan the QR code with your authenticator app, then enter the current six-digit code to finish setup.",
-                Secret = secret, ProvisioningUri = uri
+                Secret = secret, ProvisioningUri = uri, QrCodeDataUri = qrDataUri
             };
         }
 

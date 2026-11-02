@@ -5,5 +5,6 @@ namespace MentorshipHub.API.Application.DTO.Auth
     {
         public string? Secret { get; set; }
         public string? ProvisioningUri { get; set; }
+        public string? QrCodeDataUri { get; set; }
     }
 }
