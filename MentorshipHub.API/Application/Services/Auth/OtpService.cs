@@ -127,65 +127,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new EmailOtpResponse { IsSuccess = true, Message = "Verification code sent to your email." };
         }
 
-        public async Task<MfaOtpResponse> GenerateMfaOtp(Guid userId)
-        {
-            var user = await _db.Users.FindAsync(userId);
-            if (user == null)
-                return new MfaOtpResponse { IsSuccess = false, Message = "User not found." };
 
-            await using var transaction = await _db.Database.BeginTransactionAsync();
-            var lockKey = "mfa:" + userId.ToString("N");
-            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
-
-            var now = DateTime.UtcNow;
-            var existing = await _db.MfaOtps
-                .Where(x => x.UserId == userId && !x.IsUsed)
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            if (existing?.LockedUntil is DateTime lockedUntil && lockedUntil > now)
-                return new MfaOtpResponse { IsSuccess = false, Message = $"Too many failed attempts. Try again in {Math.Ceiling((lockedUntil - now).TotalMinutes)} minutes." };
-
-            if (existing != null && existing.CreatedAt.AddSeconds(60) > now)
-                return new MfaOtpResponse { IsSuccess = false, Message = $"Please wait {Math.Ceiling((existing.CreatedAt.AddSeconds(60) - now).TotalSeconds)} seconds before requesting another OTP." };
-
-            var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
-            var hash = _hasher.Hash(code);
-            if (existing != null)
-            {
-                existing.CodeHash = hash;
-                existing.AttemptCount = 0;
-                existing.MaxAttempts = 5;
-                existing.LockedUntil = null;
-                existing.IsUsed = false;
-                existing.ExpiresAt = now.AddMinutes(10);
-                existing.CreatedAt = now;
-            }
-            else
-            {
-                existing = new MfaOtp
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    CodeHash = hash,
-                    AttemptCount = 0,
-                    MaxAttempts = 5,
-                    ExpiresAt = now.AddMinutes(10),
-                    CreatedAt = now,
-                    IsUsed = false
-                };
-                _db.MfaOtps.Add(existing);
-            }
-
-            await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
-
-            var template = _emailTemplateService.BuildMfaOtp(user.Username, code);
-            var sent = await _emailService.SendEmail(user.Email, template.subject, template.body);
-            if (!sent)
-                return new MfaOtpResponse { IsSuccess = false, Message = "Failed to send OTP email. Please try again later." };
-
-            return new MfaOtpResponse { IsSuccess = true, Message = "Verification code sent to your email." };
-        }
     }
 }
