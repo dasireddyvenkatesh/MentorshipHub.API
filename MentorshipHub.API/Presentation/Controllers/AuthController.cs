@@ -129,7 +129,6 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (response.IsSuccess && !string.IsNullOrEmpty(response.MfaChallengeToken))
             {
                 SetMfaChallengeCookie(response.MfaChallengeToken);
-                response.MfaChallengeToken = null;
             }
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
@@ -239,9 +238,16 @@ namespace MentorshipHub.API.Presentation.Controllers
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> VerifyMfaChallenge([FromBody] VerifyMfaChallengeRequest request)
         {
-            var token = Request.Cookies[MfaChallengeCookieName];
+            // Prefer the short-lived challenge token explicitly returned to the
+            // UI for password sign-in. Keep the HttpOnly cookie as a fallback for
+            // external OAuth redirects that cannot carry a request body token.
+            var token = !string.IsNullOrWhiteSpace(request?.ChallengeToken)
+                ? request.ChallengeToken
+                : Request.Cookies[MfaChallengeCookieName];
+
             if (string.IsNullOrWhiteSpace(token))
                 return Unauthorized(new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
+
             return await CompleteMfaVerificationAsync(request, token);
         }
 
