@@ -92,6 +92,40 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
     };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var principal = context.Principal;
+            var sessionValue = principal?.FindFirst("sid")?.Value;
+
+            // Legacy access tokens without sid are allowed to expire naturally.
+            // Newly issued tokens always carry sid and are checked against UserSessions.
+            if (string.IsNullOrWhiteSpace(sessionValue))
+                return;
+
+            if (!Guid.TryParse(sessionValue, out var sessionId) ||
+                !Guid.TryParse(principal?.FindFirst("uid")?.Value, out var userId))
+            {
+                context.Fail("The access token session is invalid.");
+                return;
+            }
+
+            var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+            var now = DateTime.UtcNow;
+            var active = await db.UserSessions.AsNoTracking().AnyAsync(x =>
+                x.Id == sessionId &&
+                x.UserId == userId &&
+                !x.IsRevoked &&
+                x.RevokedAt == null &&
+                x.ExpiresAt > now,
+                context.HttpContext.RequestAborted);
+
+            if (!active)
+                context.Fail("This login session is no longer active.");
+        }
+    };
 })
 .AddGoogle(options =>
 {
