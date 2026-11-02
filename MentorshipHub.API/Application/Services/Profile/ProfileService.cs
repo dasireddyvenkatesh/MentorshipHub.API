@@ -85,6 +85,7 @@ namespace MentorshipHub.API.Application.Services.Profile
                 FirstName = firstName,
                 LastName = lastName,
                 PhoneNumber = user.Profile?.PhoneNumber ?? string.Empty,
+                ProfileImageUrl = user.Profile?.ProfileImageUrl,
                 Bio = user.Profile?.Bio ?? string.Empty,
                 IsEmailConfirmed = user.IsEmailConfirmed,
                 IsActive = user.IsActive,

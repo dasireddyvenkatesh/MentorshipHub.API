@@ -10,6 +10,7 @@ namespace MentorshipHub.API.Application.DTO.Profile
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string PhoneNumber { get; set; } = string.Empty;
+        public string? ProfileImageUrl { get; set; }
         public string Bio { get; set; } = string.Empty;
         public bool IsEmailConfirmed { get; set; }
         public bool IsActive { get; set; }
