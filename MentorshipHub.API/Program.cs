@@ -35,7 +35,7 @@ var appServiceHome = Environment.GetEnvironmentVariable("HOME");
 if (!string.IsNullOrWhiteSpace(appServiceHome))
 {
     var keyRingDirectory = new DirectoryInfo(
-        Path.Combine(appServiceHome, "ASP.NET", "DataProtection-Keys"));
+        Path.Combine(appServiceHome, "ASP.NET", "DataProtection-Keys-v2"));
     Directory.CreateDirectory(keyRingDirectory.FullName);
     dataProtectionBuilder.PersistKeysToFileSystem(keyRingDirectory);
 }
