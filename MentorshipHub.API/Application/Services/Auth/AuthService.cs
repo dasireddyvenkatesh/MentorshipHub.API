@@ -316,6 +316,17 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 };
             }
 
+            // Older provider links may have been created before verified-email checks existed.
+            // Do not let those legacy links bypass registration email verification.
+            if (!user.IsEmailConfirmed)
+            {
+                return new LoginResponse
+                {
+                    IsSuccess = false,
+                    Message = "This account's email is not verified. Complete registration from the Register page first."
+                };
+            }
+
             var relatedRecordsError = await EnsureUserRelatedRecordsAsync(user);
             if (relatedRecordsError != null)
                 return new LoginResponse { IsSuccess = false, Message = relatedRecordsError };
