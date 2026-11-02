@@ -13,6 +13,7 @@ using MentorshipHub.API.Enities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Identity;
@@ -24,6 +25,12 @@ using System.Text.Json;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// TOTP secrets will be protected with ASP.NET Core Data Protection.
+// Before enabling TOTP in a deployed environment, configure a durable shared key ring
+// and protect that key ring at rest (for example with Azure Key Vault or a certificate).
+builder.Services.AddDataProtection()
+    .SetApplicationName("XQARE.MentorshipHub.API");
 
 // Add services to the container.
 
@@ -157,6 +164,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddSingleton<ITotpSecretProtector, TotpSecretProtector>();
 builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IEmailService, EmailService>();

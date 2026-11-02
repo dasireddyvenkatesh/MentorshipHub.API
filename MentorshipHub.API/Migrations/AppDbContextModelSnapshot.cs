@@ -105,6 +105,68 @@ namespace MentorshipHub.API.Migrations
                     b.ToTable("ExternalLogins");
                 });
 
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaLoginChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("DeviceName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_MfaLoginChallenges_ExpiresAt");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MfaLoginChallenges_TokenHash");
+
+                    b.HasIndex("UserId", "ExpiresAt")
+                        .HasDatabaseName("IX_MfaLoginChallenges_UserId_ExpiresAt");
+
+                    b.ToTable("MfaLoginChallenges");
+                });
+
             modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaOtp", b =>
                 {
                     b.Property<Guid>("Id")
@@ -146,6 +208,44 @@ namespace MentorshipHub.API.Migrations
                     b.ToTable("MfaOtps");
                 });
 
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaRecoveryCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("InvalidatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MfaRecoveryCodes_CodeHash");
+
+                    b.HasIndex("UserId", "BatchId")
+                        .HasDatabaseName("IX_MfaRecoveryCodes_UserId_BatchId");
+
+                    b.ToTable("MfaRecoveryCodes");
+                });
+
             modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.PasswordResetToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -173,6 +273,59 @@ namespace MentorshipHub.API.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PasswordResetTokens");
+                });
+
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.TotpCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DisabledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EnabledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedSecret")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<int>("FailedAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FailedAttemptWindowStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("LastAcceptedTimeStep")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("LockoutEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PendingEncryptedSecret")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<DateTime?>("PendingEnrollmentExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_TotpCredentials_UserId");
+
+                    b.ToTable("TotpCredentials");
                 });
 
             modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", b =>
@@ -220,6 +373,12 @@ namespace MentorshipHub.API.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("AccessFailedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FailedLoginWindowStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LockoutLevel")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("LockoutEnd")
@@ -416,6 +575,40 @@ namespace MentorshipHub.API.Migrations
                     b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaLoginChallenge", b =>
+                {
+                    b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaRecoveryCode", b =>
+                {
+                    b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.TotpCredential", b =>
+                {
+                    b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", "User")
+                        .WithOne()
+                        .HasForeignKey("MentorshipHub.API.Infrastructure.EntityModels.Identity.TotpCredential", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

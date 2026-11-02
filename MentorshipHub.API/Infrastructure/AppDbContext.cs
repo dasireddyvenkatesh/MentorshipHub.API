@@ -20,6 +20,9 @@ namespace MentorshipHub.API.Enities
         public DbSet<UserSession> UserSessions { get; set; }
 
         public DbSet<MfaOtp> MfaOtps { get; set; }
+        public DbSet<TotpCredential> TotpCredentials { get; set; }
+        public DbSet<MfaLoginChallenge> MfaLoginChallenges { get; set; }
+        public DbSet<MfaRecoveryCode> MfaRecoveryCodes { get; set; }
         public DbSet<EmailVerificationOtp> EmailVerificationOtps { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
@@ -111,6 +114,57 @@ namespace MentorshipHub.API.Enities
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+
+            builder.Entity<TotpCredential>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.EncryptedSecret).HasMaxLength(2048);
+                entity.Property(x => x.PendingEncryptedSecret).HasMaxLength(2048);
+                entity.HasIndex(x => x.UserId)
+                    .IsUnique()
+                    .HasDatabaseName("IX_TotpCredentials_UserId");
+                entity.HasOne(x => x.User)
+                    .WithOne()
+                    .HasForeignKey<TotpCredential>(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<MfaLoginChallenge>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.TokenHash).IsRequired().HasMaxLength(128);
+                entity.Property(x => x.Purpose).IsRequired().HasMaxLength(64);
+                entity.Property(x => x.DeviceId).HasMaxLength(256);
+                entity.Property(x => x.DeviceName).HasMaxLength(256);
+                entity.Property(x => x.IpAddress).HasMaxLength(64);
+                entity.Property(x => x.UserAgent).HasMaxLength(1024);
+                entity.HasIndex(x => x.TokenHash)
+                    .IsUnique()
+                    .HasDatabaseName("IX_MfaLoginChallenges_TokenHash");
+                entity.HasIndex(x => x.ExpiresAt)
+                    .HasDatabaseName("IX_MfaLoginChallenges_ExpiresAt");
+                entity.HasIndex(x => new { x.UserId, x.ExpiresAt })
+                    .HasDatabaseName("IX_MfaLoginChallenges_UserId_ExpiresAt");
+                entity.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<MfaRecoveryCode>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.CodeHash).IsRequired().HasMaxLength(128);
+                entity.HasIndex(x => x.CodeHash)
+                    .IsUnique()
+                    .HasDatabaseName("IX_MfaRecoveryCodes_CodeHash");
+                entity.HasIndex(x => new { x.UserId, x.BatchId })
+                    .HasDatabaseName("IX_MfaRecoveryCodes_UserId_BatchId");
+                entity.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             builder.Entity<PasswordResetToken>()
                 .HasKey(x => x.Id);

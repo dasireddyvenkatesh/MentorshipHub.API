@@ -10,6 +10,8 @@ namespace MentorshipHub.API.Infrastructure.EntityModels.Identity
         public bool MfaEnabled { get; set; }
         public int AccessFailedCount { get; set; }
         public DateTime? LockoutEnd { get; set; }
+        public DateTime? FailedLoginWindowStartedAt { get; set; }
+        public int LockoutLevel { get; set; }
 
         public User User { get; set; }
     }
