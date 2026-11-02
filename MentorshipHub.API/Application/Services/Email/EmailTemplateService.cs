@@ -1,6 +1,7 @@
 ﻿using Azure.Core;
 using MentorshipHub.API.Application.Interfaces.Email;
 using System.Text;
+using System.Text.Encodings.Web;
 
 namespace MentorshipHub.API.Application.Services.Email
 {
@@ -126,6 +127,30 @@ namespace MentorshipHub.API.Application.Services.Email
             sb.Append("</div>");
             sb.Append("</body>");
             sb.Append("</html>");
+
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) BuildPasswordReset(string firstName, string resetUrl)
+        {
+            const string subject = "Reset your XQARE password";
+            var safeName = HtmlEncoder.Default.Encode(firstName ?? "there");
+            var safeUrl = HtmlEncoder.Default.Encode(resetUrl);
+
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html><body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+            sb.Append("<h2 style='color:#0f2a44;'>Reset your password</h2>");
+            sb.Append($"<p>Hi {safeName},</p>");
+            sb.Append("<p>We received a request to reset the password for your XQARE account.</p>");
+            sb.Append($"<p style='text-align:center;margin:30px 0;'><a href='{safeUrl}' style='display:inline-block;background:#f59e0b;color:white;text-decoration:none;padding:14px 24px;border-radius:8px;font-weight:bold;'>Reset Password</a></p>");
+            sb.Append("<p>This link expires in <strong>15 minutes</strong> and can be used only once.</p>");
+            sb.Append("<p style='color:#777;'>If the button does not work, copy and paste this link into your browser:</p>");
+            sb.Append($"<p style='word-break:break-all;color:#475569;'>{safeUrl}</p>");
+            sb.Append("<p style='color:#777;'>If you did not request a password reset, you can safely ignore this email. Your current password will remain unchanged.</p>");
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+            sb.Append("</div></body></html>");
 
             return (subject, sb.ToString());
         }
