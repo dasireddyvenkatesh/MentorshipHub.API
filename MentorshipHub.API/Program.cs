@@ -130,6 +130,7 @@ builder.Services.AddAuthentication(options =>
     options.ConsumerSecret = builder.Configuration["Twitter:ClientSecret"]!;
     options.RetrieveUserDetails = true;
     options.ClaimActions.MapJsonKey("urn:twitter:profile_image", "profile_image_url_https");
+    options.ClaimActions.MapJsonKey("email_verified", "email_verified");
 
 })
 .AddLinkedIn(options =>
