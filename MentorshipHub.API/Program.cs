@@ -23,48 +23,22 @@ using System.Security.Claims;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text;
-using System.Security.Cryptography.X509Certificates;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Keep the Data Protection key ring available only for reading secrets encrypted
-// by the previous TOTP implementation. New TOTP secrets use AES-256-GCM with keys
-// supplied through Totp:ActiveKeyVersion and Totp:EncryptionKeys:{version}.
+// Data Protection remains for ASP.NET Core OAuth correlation and sign-in cookies.
+// Use a fresh ring so old certificate-protected keys and cookies are not loaded.
 var dataProtectionBuilder = builder.Services.AddDataProtection()
-    .SetApplicationName("XQARE.MentorshipHub.API");
+    .SetApplicationName("XQARE.MentorshipHub.API")
+    .SetDefaultKeyLifetime(TimeSpan.FromDays(90));
 
 var appServiceHome = Environment.GetEnvironmentVariable("HOME");
 if (!string.IsNullOrWhiteSpace(appServiceHome))
 {
     var keyRingDirectory = new DirectoryInfo(
-        Path.Combine(appServiceHome, "ASP.NET", "DataProtection-Keys"));
+        Path.Combine(appServiceHome, "ASP.NET", "DataProtection-Keys-v2"));
     Directory.CreateDirectory(keyRingDirectory.FullName);
     dataProtectionBuilder.PersistKeysToFileSystem(keyRingDirectory);
-}
-
- // Optional compatibility path: if the old Data Protection key ring was protected
- // with a certificate, retain that certificate setting so legacy TOTP ciphertext
- // can still be decrypted. New TOTP secrets use AES-GCM and do not require this.
-var legacyDataProtectionThumbprint = builder.Configuration["DataProtection:CertificateThumbprint"];
-if (!string.IsNullOrWhiteSpace(legacyDataProtectionThumbprint))
-{
-    using var certificateStore = new X509Store(StoreName.My, StoreLocation.CurrentUser);
-    certificateStore.Open(OpenFlags.ReadOnly);
-    var legacyCertificate = certificateStore.Certificates
-        .Find(
-            X509FindType.FindByThumbprint,
-            legacyDataProtectionThumbprint.Replace(" ", string.Empty, StringComparison.Ordinal),
-            validOnly: false)
-        .OfType<X509Certificate2>()
-        .FirstOrDefault();
-
-    if (legacyCertificate == null || !legacyCertificate.HasPrivateKey)
-    {
-        throw new InvalidOperationException(
-            "The configured legacy Data Protection certificate was not found with a private key.");
-    }
-
-    dataProtectionBuilder.ProtectKeysWithCertificate(legacyCertificate);
 }
 
 // Add services to the container.
@@ -104,16 +78,13 @@ builder.Services.AddAuthentication(options =>
         {
             var principal = context.Principal;
             var sessionValue = principal?.FindFirst("sid")?.Value;
+            var userValue = principal?.FindFirst("uid")?.Value;
 
-            // Legacy access tokens without sid are allowed to expire naturally.
-            // Newly issued tokens always carry sid and are checked against UserSessions.
-            if (string.IsNullOrWhiteSpace(sessionValue))
-                return;
-
+            // Every accepted access token must belong to an active server-side session.
             if (!Guid.TryParse(sessionValue, out var sessionId) ||
-                !Guid.TryParse(principal?.FindFirst("uid")?.Value, out var userId))
+                !Guid.TryParse(userValue, out var userId))
             {
-                context.Fail("The access token session is invalid.");
+                context.Fail("The access token is missing valid session claims.");
                 return;
             }
 

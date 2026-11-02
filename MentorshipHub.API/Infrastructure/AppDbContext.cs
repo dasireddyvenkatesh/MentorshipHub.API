@@ -19,7 +19,6 @@ namespace MentorshipHub.API.Enities
         public DbSet<UserSecuritySetting> UserSecuritySettings { get; set; }
         public DbSet<UserSession> UserSessions { get; set; }
 
-        public DbSet<MfaOtp> MfaOtps { get; set; }
         public DbSet<TotpCredential> TotpCredentials { get; set; }
         public DbSet<MfaLoginChallenge> MfaLoginChallenges { get; set; }
         public DbSet<MfaRecoveryCode> MfaRecoveryCodes { get; set; }
@@ -98,22 +97,6 @@ namespace MentorshipHub.API.Enities
 
             builder.Entity<UserSession>()
                 .HasKey(x => x.Id);
-
-            builder.Entity<MfaOtp>(entity =>
-            {
-                entity.HasKey(x => x.Id);
-                entity.HasIndex(x => x.UserId)
-                    .IsUnique()
-                    .HasFilter("\"IsUsed\" = FALSE")
-                    .HasDatabaseName("IX_MfaOtps_UserId_Active");
-            });
-
-            builder.Entity<MfaOtp>()
-                .HasOne(x => x.User)
-                .WithMany()
-                .HasForeignKey(x => x.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
 
             builder.Entity<TotpCredential>(entity =>
             {

@@ -167,47 +167,6 @@ namespace MentorshipHub.API.Migrations
                     b.ToTable("MfaLoginChallenges");
                 });
 
-            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaOtp", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("CodeHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsUsed")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LockedUntil")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("MaxAttempts")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique()
-                        .HasFilter("\"IsUsed\" = FALSE")
-                        .HasDatabaseName("IX_MfaOtps_UserId_Active");
-
-                    b.ToTable("MfaOtps");
-                });
-
             modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaRecoveryCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -569,18 +528,6 @@ namespace MentorshipHub.API.Migrations
 
                     b.Navigation("User");
                 });
-
-            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaOtp", b =>
-                {
-                    b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
 
             modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Identity.MfaLoginChallenge", b =>
                 {

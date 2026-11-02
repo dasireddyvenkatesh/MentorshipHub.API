@@ -228,7 +228,6 @@ namespace MentorshipHub.API.Presentation.Controllers
                 return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
                 {
                     ["mfa"] = "required",
-                    ["mfaMethod"] = response.MfaMethod ?? "totp",
                     ["email"] = response.Email ?? oauthUser.Email,
                     ["message"] = response.Message ?? "Enter your verification code to finish signing in."
                 }));
@@ -253,18 +252,6 @@ namespace MentorshipHub.API.Presentation.Controllers
             var response = await _authService.ResendEmailOtp(request);
 
             return Ok(response);
-        }
-
-        [HttpPost("request-mfa-otp")]
-        [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
-        public async Task<IActionResult> RequestMfaOtp([FromBody] MfaOtpRequest request)
-        {
-            var token = Request.Cookies["xqare_mfa_challenge"];
-            if (string.IsNullOrWhiteSpace(token))
-                return Unauthorized(new MfaOtpResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
-            // The legacy userId body is ignored; only the short-lived server-issued cookie identifies the challenge.
-            return Ok(await _authService.ResendMfaChallengeAsync(token));
         }
 
         [HttpPost("verify-mfa-challenge")]
@@ -308,17 +295,6 @@ namespace MentorshipHub.API.Presentation.Controllers
             }
 
             return Ok(response);
-        }
-
-        [HttpPost("verify-mfa-otp")]
-        [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
-        public async Task<IActionResult> VerifyMfaOtp([FromBody] VerifyMfaOtpRequest request)
-        {
-            var token = Request.Cookies["xqare_mfa_challenge"];
-            if (string.IsNullOrWhiteSpace(token))
-                return Unauthorized(new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
-            return await CompleteMfaVerificationAsync(new VerifyMfaChallengeRequest { Code = request.Code, Factor = "auto" }, token);
         }
 
         private async Task<IActionResult> CompleteMfaVerificationAsync(VerifyMfaChallengeRequest request, string token)

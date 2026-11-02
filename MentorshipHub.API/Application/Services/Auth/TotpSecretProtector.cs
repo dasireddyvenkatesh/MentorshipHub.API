@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using MentorshipHub.API.Application.Interfaces.Auth;
-using Microsoft.AspNetCore.DataProtection;
 
 namespace MentorshipHub.API.Application.Classes.Auth
 {
@@ -19,17 +18,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private const int TagSizeBytes = 16;
         private const string FormatVersion = "v1";
 
-        private readonly IDataProtector _legacyProtector;
         private readonly IReadOnlyDictionary<int, byte[]> _keys;
         private readonly int? _activeKeyVersion;
 
         public TotpSecretProtector(
-            IDataProtectionProvider dataProtectionProvider,
             IConfiguration configuration,
             ILogger<TotpSecretProtector> logger)
         {
-            _legacyProtector = dataProtectionProvider.CreateProtector(
-                "XQARE.MentorshipHub.API.TotpSecret.v1");
 
             var configuredKeys = new Dictionary<int, byte[]>();
             foreach (var entry in configuration.GetSection("Totp:EncryptionKeys").GetChildren())
@@ -128,10 +123,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(protectedSecret);
 
-            // Values created before the AES-GCM cutover are still readable while
-            // their original Data Protection key ring is retained.
+            // Only the current versioned AES-GCM envelope is accepted.
             if (!protectedSecret.StartsWith(FormatPrefix, StringComparison.Ordinal))
-                return _legacyProtector.Unprotect(protectedSecret);
+                throw new CryptographicException("The stored TOTP secret does not use the supported AES-GCM format.");
 
             var parts = protectedSecret.Split(':');
             if (parts.Length != 7 ||
