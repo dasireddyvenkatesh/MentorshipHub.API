@@ -9,7 +9,7 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task CreateAsync(UserSession session);
         Task RotateAsync(UserSession session, string newRefreshToken);
         Task RevokeAsync(string refreshToken);
-        Task HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken);
+        Task<Guid> HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken);
 
     }
 }
