@@ -18,6 +18,8 @@ namespace MentorshipHub.API.Application.Services.Auth
                 user.FindFirst("urn:twitter:profile_image")?.Value ??
                 user.FindFirst("profile_image_url")?.Value;
 
+            var emailVerified = bool.TryParse(user.FindFirst("email_verified")?.Value, out var isVerified) && isVerified;
+
             var providerId =
                 user.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
                 user.FindFirst("sub")?.Value ??
@@ -33,6 +35,7 @@ namespace MentorshipHub.API.Application.Services.Auth
                 Provider = provider,
                 ProviderId = providerId,
                 Email = email,
+                EmailVerified = emailVerified,
                 Name = name,
                 Avatar = avatar,
                 DeviceId = properties.Items["deviceId"] ?? default!,
