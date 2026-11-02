@@ -1,6 +1,7 @@
 ﻿using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.DTO.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
+using MentorshipHub.API.Application.Interfaces.Email;
 using MentorshipHub.API.Application.Interfaces.Commom;
 using MentorshipHub.API.Enities;
 using MentorshipHub.API.Infrastructure.EntityModels.Identity;
