@@ -27,11 +27,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private readonly IEmailService _emailService;
         private readonly IEmailTemplateService _emailTemplateService;
         private readonly IConfiguration _configuration;
+        private readonly ITotpService _totp;
 
         public AuthService(AppDbContext db, IJwtTokenService jwt, IPasswordHasher hasher,
                             IUserSessionService sessions, IOtpService otp, IPublicIdService publicIdService,
                             IEmailService emailService, IEmailTemplateService emailTemplateService,
-                            IConfiguration configuration)
+                            IConfiguration configuration, ITotpService totp)
         {
             _db = db;
             _jwt = jwt;
@@ -42,6 +43,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             _emailService = emailService;
             _emailTemplateService = emailTemplateService;
             _configuration = configuration;
+            _totp = totp;
         }
 
         private const string PasswordResetGenericMessage =
@@ -265,20 +267,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 };
             }
 
-            // MFA
             if (user.SecuritySetting?.MfaEnabled == true)
-            {
-                var otpResponse = await _otp.GenerateMfaOtp(user.Id);
-
-                return new LoginResponse
-                {
-                    IsSuccess = otpResponse.IsSuccess,
-                    RequiresMfa = otpResponse.IsSuccess,
-                    UserId = user.Id,
-                    Email = user.Email,
-                    Message = otpResponse.Message
-                };
-            }
+                return await CreateMfaChallengeAsync(user, new LoginRequest { DeviceId = request.DeviceId, DeviceName = request.DeviceName });
 
             return await CreateSession(user, request);
         }
@@ -530,26 +520,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (relatedRecordsError != null)
                 return new LoginResponse { IsSuccess = false, Message = relatedRecordsError };
 
+            var loginRequest = new LoginRequest { DeviceId = request.DeviceId, DeviceName = request.DeviceName };
             if (user.SecuritySetting?.MfaEnabled == true)
-            {
-                var response = await _otp.GenerateMfaOtp(user.Id);
-
-                return new LoginResponse
-                {
-                    RequiresMfa = response.IsSuccess,
-                    UserId = user.Id,
-                    Email = user.Email,
-                    IsSuccess = response.IsSuccess,
-                    Message = response.Message
-                };
-            }
-
-            var loginRequest = new LoginRequest
-            {
-                DeviceId = request.DeviceId,
-                DeviceName = request.DeviceName
-            };
-
+                return await CreateMfaChallengeAsync(user, loginRequest);
             return await CreateSession(user, loginRequest);
         }
 
@@ -576,22 +549,168 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         }
 
-        public async Task<MfaOtpResponse> MfaOtpAsync(MfaOtpRequest request)
+        private async Task<LoginResponse> CreateMfaChallengeAsync(User user, LoginRequest loginRequest)
         {
-            if (request == null || request.Id == Guid.Empty)
-                return new MfaOtpResponse { IsSuccess = false, Message = "A valid MFA session is required." };
-
-            var user = await _db.Users
-                .Include(x => x.SecuritySetting)
-                .FirstOrDefaultAsync(x => x.Id == request.Id);
-
-            if (user == null || !user.IsActive || !user.IsEmailConfirmed ||
-                user.SecuritySetting?.MfaEnabled != true)
+            var totpEnabled = await _totp.IsEnabledAsync(user.Id);
+            var purpose = totpEnabled ? "totp" : "legacy-email";
+            var message = totpEnabled
+                ? "Enter the six-digit code from your authenticator app."
+                : "Enter the verification code sent to your registered email. After signing in, set up an authenticator app from Profile.";
+            if (!totpEnabled)
             {
-                return new MfaOtpResponse { IsSuccess = false, Message = "MFA is not enabled for this account." };
+                var otp = await _otp.GenerateMfaOtp(user.Id);
+                if (!otp.IsSuccess) return new LoginResponse { IsSuccess = false, Message = otp.Message };
+                message = otp.Message + " You can migrate to an authenticator app from Profile after signing in.";
             }
 
+            var token = Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+            _db.MfaLoginChallenges.Add(new MfaLoginChallenge
+            {
+                UserId = user.Id, TokenHash = hash, Purpose = purpose,
+                DeviceId = loginRequest.DeviceId, DeviceName = loginRequest.DeviceName,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(5), AttemptCount = 0
+            });
+            await _db.SaveChangesAsync();
+            return new LoginResponse
+            {
+                IsSuccess = true, RequiresMfa = true, MfaMethod = totpEnabled ? "totp" : "email",
+                MfaChallengeToken = token, UserId = user.Id, Email = user.Email, Message = message
+            };
+        }
+
+        public async Task<MfaOtpResponse> ResendMfaChallengeAsync(string challengeToken)
+        {
+            if (string.IsNullOrWhiteSpace(challengeToken))
+                return new MfaOtpResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." };
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(challengeToken)));
+            var now = DateTime.UtcNow;
+            var challenge = await _db.MfaLoginChallenges.FirstOrDefaultAsync(x =>
+                x.TokenHash == hash && x.Purpose == "legacy-email" &&
+                x.ConsumedAt == null && x.ExpiresAt > now && x.AttemptCount < 5);
+            if (challenge == null)
+                return new MfaOtpResponse { IsSuccess = false, Message = "Use your authenticator app or sign in again to restart verification." };
+            var user = await _db.Users.FindAsync(challenge.UserId);
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed)
+                return new MfaOtpResponse { IsSuccess = false, Message = "The MFA challenge is no longer valid." };
             return await _otp.GenerateMfaOtp(user.Id);
+        }
+
+        public async Task<LoginResponse> VerifyMfaChallengeAsync(VerifyMfaChallengeRequest request, string challengeToken)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(challengeToken) || string.IsNullOrWhiteSpace(request.Code))
+                return new LoginResponse { IsSuccess = false, Message = "The MFA verification request is invalid." };
+            var factor = (request.Factor ?? "auto").Trim().ToLowerInvariant();
+            if (factor != "auto" && factor != "totp" && factor != "recovery" && factor != "email")
+                return new LoginResponse { IsSuccess = false, Message = "Unsupported MFA verification method." };
+
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(challengeToken)));
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var challenge = await _db.MfaLoginChallenges
+                .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges"" WHERE ""TokenHash"" = {hash} FOR UPDATE")
+                .FirstOrDefaultAsync();
+            var now = DateTime.UtcNow;
+            if (challenge == null || challenge.ConsumedAt != null || challenge.ExpiresAt <= now || challenge.AttemptCount >= 5)
+            {
+                await transaction.RollbackAsync();
+                return new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired or is no longer valid. Please sign in again." };
+            }
+
+            var user = await _db.Users.Include(x => x.SecuritySetting).FirstOrDefaultAsync(x => x.Id == challenge.UserId);
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed || user.SecuritySetting?.MfaEnabled != true)
+            {
+                await transaction.RollbackAsync();
+                return new LoginResponse { IsSuccess = false, Message = "The MFA challenge is no longer valid." };
+            }
+
+            var valid = false;
+            var failure = "The verification code is invalid.";
+            if (challenge.Purpose == "totp" && (factor == "auto" || factor == "totp"))
+            {
+                var result = await _totp.VerifyCodeAndConsumeAsync(user.Id, request.Code);
+                valid = result.IsValid;
+                failure = result.Message;
+            }
+            else if (challenge.Purpose == "totp" && factor == "recovery")
+            {
+                valid = await _totp.ConsumeRecoveryCodeAsync(user.Id, request.Code);
+                failure = "The recovery code is invalid or has already been used.";
+            }
+            else if (challenge.Purpose == "legacy-email" && (factor == "auto" || factor == "email"))
+            {
+                var otp = await _db.MfaOtps
+                    .FromSqlInterpolated($@"SELECT * FROM ""MfaOtps"" WHERE ""UserId"" = {user.Id} AND ""IsUsed"" = FALSE FOR UPDATE")
+                    .FirstOrDefaultAsync();
+                if (otp == null || otp.ExpiresAt <= now || (otp.LockedUntil.HasValue && otp.LockedUntil.Value > now))
+                    failure = "The email verification code has expired or is temporarily locked.";
+                else if (_hasher.Verify(otp.CodeHash, request.Code.Trim()))
+                {
+                    otp.IsUsed = true;
+                    valid = true;
+                }
+                else
+                {
+                    otp.AttemptCount++;
+                    if (otp.AttemptCount >= otp.MaxAttempts) otp.LockedUntil = now.AddHours(24);
+                    failure = otp.LockedUntil.HasValue && otp.LockedUntil.Value > now
+                        ? "Too many incorrect email codes. Try again later."
+                        : $"Incorrect email code. {Math.Max(0, otp.MaxAttempts - otp.AttemptCount)} attempt(s) remaining.";
+                }
+            }
+
+            if (!valid)
+            {
+                challenge.AttemptCount++;
+                if (challenge.AttemptCount >= 5) challenge.ConsumedAt = now;
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return new LoginResponse
+                {
+                    IsSuccess = false,
+                    Message = challenge.ConsumedAt.HasValue ? "Too many incorrect verification attempts. Sign in again to restart." : failure
+                };
+            }
+
+            challenge.ConsumedAt = now;
+            var loginRequest = new LoginRequest { DeviceId = challenge.DeviceId ?? string.Empty, DeviceName = challenge.DeviceName };
+            var response = await CreateSession(user, loginRequest);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return response;
+        }
+
+        public async Task<TotpEnrollmentStartResponse> StartTotpEnrollmentAsync(Guid userId, TotpEnrollmentStartRequest request)
+        {
+            var user = await _db.Users.FindAsync(userId);
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed)
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = "The account is not eligible for authenticator setup." };
+            if (string.IsNullOrWhiteSpace(user.PasswordHash) || !_hasher.Verify(user.PasswordHash, request.CurrentPassword ?? string.Empty))
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = "Confirm your current account password before setting up an authenticator." };
+            var enabled = await _totp.IsEnabledAsync(userId);
+            if (enabled)
+            {
+                var current = await _totp.VerifyCodeAndConsumeAsync(userId, request.CurrentTotpCode ?? string.Empty);
+                if (!current.IsValid)
+                    return new TotpEnrollmentStartResponse { IsSuccess = false, Message = "Enter a valid current authenticator code before replacing it." };
+            }
+            return await _totp.StartEnrollmentAsync(userId, user.Email, allowReplace: enabled);
+        }
+
+        public Task<TotpEnrollmentConfirmResponse> ConfirmTotpEnrollmentAsync(Guid userId, TotpEnrollmentConfirmRequest request)
+            => _totp.ConfirmEnrollmentAsync(userId, request.Code);
+        public Task<TotpStatusResponse> GetTotpStatusAsync(Guid userId) => _totp.GetStatusAsync(userId);
+        public Task<TotpEnrollmentConfirmResponse> RegenerateTotpRecoveryCodesAsync(Guid userId, TotpRecoveryCodesRegenerateRequest request)
+            => _totp.RegenerateRecoveryCodesAsync(userId, request.Code);
+
+        public async Task<ResponseDTO> DisableTotpAsync(Guid userId, TotpDisableRequest request)
+        {
+            var user = await _db.Users.FindAsync(userId);
+            if (user == null || string.IsNullOrWhiteSpace(user.PasswordHash) || !_hasher.Verify(user.PasswordHash, request.CurrentPassword ?? string.Empty))
+                return new ResponseDTO { IsSuccess = false, Message = "Current password is incorrect." };
+            var verification = await _totp.VerifyCodeAndConsumeAsync(userId, request.Code);
+            if (!verification.IsValid) return new ResponseDTO { IsSuccess = false, Message = verification.Message };
+            await _totp.DisableAsync(userId);
+            return new ResponseDTO { IsSuccess = true, Message = "Authenticator disabled successfully." };
         }
 
         public async Task<LoginResponse> VerifyRegisterEmailOtp(VerifyEmailOtpRequest request)

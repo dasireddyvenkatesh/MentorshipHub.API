@@ -165,6 +165,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddSingleton<ITotpSecretProtector, TotpSecretProtector>();
+builder.Services.AddScoped<ITotpService, TotpService>();
 builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IEmailService, EmailService>();

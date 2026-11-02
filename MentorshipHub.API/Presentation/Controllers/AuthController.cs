@@ -58,6 +58,19 @@ namespace MentorshipHub.API.Presentation.Controllers
             Response.Cookies.Append("refreshToken", token, RefreshTokenCookieOptions());
         }
 
+        private static CookieOptions MfaChallengeCookieOptions() => new()
+        {
+            HttpOnly = true, Secure = true, SameSite = SameSiteMode.None,
+            Path = "/api/auth", MaxAge = TimeSpan.FromMinutes(5)
+        };
+        private void SetMfaChallengeCookie(string token)
+            => Response.Cookies.Append("xqare_mfa_challenge", token, MfaChallengeCookieOptions());
+        private void ClearMfaChallengeCookie()
+            => Response.Cookies.Delete("xqare_mfa_challenge", new CookieOptions
+            { HttpOnly = true, Secure = true, SameSite = SameSiteMode.None, Path = "/api/auth" });
+        private Guid? CurrentUserId()
+            => Guid.TryParse(User.FindFirst("uid")?.Value, out var userId) ? userId : null;
+
         private void ClearRefreshTokenCookie()
         {
             // Clear both the legacy default path (/api/auth) and root-path cookies
@@ -133,13 +146,17 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             var response = await _authService.LoginAsync(request);
 
+            if (response.IsSuccess && !string.IsNullOrEmpty(response.MfaChallengeToken))
+            {
+                SetMfaChallengeCookie(response.MfaChallengeToken);
+                response.MfaChallengeToken = null;
+            }
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
+                ClearMfaChallengeCookie();
                 SetRefreshTokenCookie(response.RefreshToken);
-                // The refresh token is cookie-only; never expose it in the JSON body.
                 response.RefreshToken = string.Empty;
             }
-
             return Ok(response);
         }
 
@@ -205,13 +222,14 @@ namespace MentorshipHub.API.Presentation.Controllers
                 return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), "externalLogin", "success"));
             }
 
-            if (response.IsSuccess && response.RequiresMfa && response.UserId.HasValue)
+            if (response.IsSuccess && response.RequiresMfa && !string.IsNullOrWhiteSpace(response.MfaChallengeToken))
             {
+                SetMfaChallengeCookie(response.MfaChallengeToken);
                 return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
                 {
-                    ["mfaUserId"] = response.UserId.Value.ToString(),
+                    ["mfa"] = "required",
                     ["email"] = response.Email ?? oauthUser.Email,
-                    ["message"] = response.Message ?? "Enter your MFA code to finish signing in."
+                    ["message"] = response.Message ?? "Enter your verification code to finish signing in."
                 }));
             }
 
@@ -237,12 +255,26 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("request-mfa-otp")]
+        [AllowAnonymous]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> RequestMfaOtp([FromBody] MfaOtpRequest request)
         {
-            var response = await _authService.MfaOtpAsync(request);
+            var token = Request.Cookies["xqare_mfa_challenge"];
+            if (string.IsNullOrWhiteSpace(token))
+                return Unauthorized(new MfaOtpResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
+            // The legacy userId body is ignored; only the short-lived server-issued cookie identifies the challenge.
+            return Ok(await _authService.ResendMfaChallengeAsync(token));
+        }
 
-            return Ok(response);
+        [HttpPost("verify-mfa-challenge")]
+        [AllowAnonymous]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> VerifyMfaChallenge([FromBody] VerifyMfaChallengeRequest request)
+        {
+            var token = Request.Cookies["xqare_mfa_challenge"];
+            if (string.IsNullOrWhiteSpace(token))
+                return Unauthorized(new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
+            return await CompleteMfaVerificationAsync(request, token);
         }
 
         [HttpPost("verify-register-email-otp")]
@@ -278,19 +310,75 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("verify-mfa-otp")]
+        [AllowAnonymous]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> VerifyMfaOtp([FromBody] VerifyMfaOtpRequest request)
         {
-            var response = await _authService.VerifyMfaOtpAsync(request);
+            var token = Request.Cookies["xqare_mfa_challenge"];
+            if (string.IsNullOrWhiteSpace(token))
+                return Unauthorized(new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
+            return await CompleteMfaVerificationAsync(new VerifyMfaChallengeRequest { Code = request.Code, Factor = "auto" }, token);
+        }
 
-            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
+        private async Task<IActionResult> CompleteMfaVerificationAsync(VerifyMfaChallengeRequest request, string token)
+        {
+            var response = await _authService.VerifyMfaChallengeAsync(request, token);
+            if (response.IsSuccess && !string.IsNullOrWhiteSpace(response.RefreshToken))
             {
+                ClearMfaChallengeCookie();
                 SetRefreshTokenCookie(response.RefreshToken);
-                // The refresh token is cookie-only; never expose it in the JSON body.
                 response.RefreshToken = string.Empty;
             }
-
             return Ok(response);
+        }
+
+        [HttpGet("totp/status")]
+        [Authorize]
+        public async Task<IActionResult> GetTotpStatus()
+        {
+            var id = CurrentUserId();
+            if (!id.HasValue) return Unauthorized();
+            return Ok(await _authService.GetTotpStatusAsync(id.Value));
+        }
+
+        [HttpPost("totp/enrollment/start")]
+        [Authorize]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> StartTotpEnrollment([FromBody] TotpEnrollmentStartRequest request)
+        {
+            var id = CurrentUserId();
+            if (!id.HasValue) return Unauthorized();
+            return Ok(await _authService.StartTotpEnrollmentAsync(id.Value, request));
+        }
+
+        [HttpPost("totp/enrollment/confirm")]
+        [Authorize]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> ConfirmTotpEnrollment([FromBody] TotpEnrollmentConfirmRequest request)
+        {
+            var id = CurrentUserId();
+            if (!id.HasValue) return Unauthorized();
+            return Ok(await _authService.ConfirmTotpEnrollmentAsync(id.Value, request));
+        }
+
+        [HttpPost("totp/recovery-codes/regenerate")]
+        [Authorize]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> RegenerateTotpRecoveryCodes([FromBody] TotpRecoveryCodesRegenerateRequest request)
+        {
+            var id = CurrentUserId();
+            if (!id.HasValue) return Unauthorized();
+            return Ok(await _authService.RegenerateTotpRecoveryCodesAsync(id.Value, request));
+        }
+
+        [HttpPost("totp/disable")]
+        [Authorize]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> DisableTotp([FromBody] TotpDisableRequest request)
+        {
+            var id = CurrentUserId();
+            if (!id.HasValue) return Unauthorized();
+            return Ok(await _authService.DisableTotpAsync(id.Value, request));
         }
 
         [HttpPost("refresh-token")]
@@ -330,6 +418,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             // Always clear the cookie, even when the access token/session has already expired.
             ClearRefreshTokenCookie();
+            ClearMfaChallengeCookie();
             return Ok("Logged out successfully");
         }
 
