@@ -649,7 +649,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 IsSuccess = true,
                 RequiresMfa = true,
-                MfaMethod = "totp",
                 MfaChallengeToken = token,
                 UserId = user.Id,
                 Email = user.Email,
