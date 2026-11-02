@@ -1,4 +1,5 @@
 ﻿using MentorshipHub.API.Application.DTO.Auth;
+using MentorshipHub.API.Application.DTO.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Commom;
 using MentorshipHub.API.Enities;
@@ -8,6 +9,9 @@ using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace MentorshipHub.API.Application.Classes.Auth
 {
@@ -19,9 +23,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private readonly IUserSessionService _sessions;
         private readonly IOtpService _otp;
         private readonly IPublicIdService _publicIdService;
+        private readonly IEmailService _emailService;
+        private readonly IEmailTemplateService _emailTemplateService;
+        private readonly IConfiguration _configuration;
 
         public AuthService(AppDbContext db, IJwtTokenService jwt, IPasswordHasher hasher,
-                            IUserSessionService sessions, IOtpService otp, IPublicIdService publicIdService)
+                            IUserSessionService sessions, IOtpService otp, IPublicIdService publicIdService,
+                            IEmailService emailService, IEmailTemplateService emailTemplateService,
+                            IConfiguration configuration)
         {
             _db = db;
             _jwt = jwt;
@@ -29,6 +38,195 @@ namespace MentorshipHub.API.Application.Classes.Auth
             _sessions = sessions;
             _otp = otp;
             _publicIdService = publicIdService;
+            _emailService = emailService;
+            _emailTemplateService = emailTemplateService;
+            _configuration = configuration;
+        }
+
+        private const string PasswordResetGenericMessage =
+            "If an account with that email exists, we'll send a password reset link shortly.";
+
+        public async Task<ResponseDTO> RequestPasswordResetAsync(ForgotPasswordRequest request)
+        {
+            var email = request?.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
+            {
+                // Keep the same outward response for malformed, unknown and known addresses.
+                return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+            }
+
+            string? rawToken = null;
+            PasswordResetToken? resetToken = null;
+            User? user = null;
+
+            await using (var transaction = await _db.Database.BeginTransactionAsync())
+            {
+                // Serialize concurrent reset requests for the same email address.
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtext({email}))");
+
+                user = await _db.Users.FirstOrDefaultAsync(x =>
+                    x.Email.ToLower() == email && x.IsActive && x.IsEmailConfirmed);
+
+                if (user == null)
+                {
+                    await transaction.CommitAsync();
+                    return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+                }
+
+                var now = DateTime.UtcNow;
+                var recentRequests = await _db.PasswordResetTokens.CountAsync(x =>
+                    x.UserId == user.Id && x.CreatedAt >= now.AddHours(-1));
+
+                // Three reset emails per account in a rolling hour.
+                if (recentRequests >= 3)
+                {
+                    await transaction.CommitAsync();
+                    return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+                }
+
+                var outstandingTokens = await _db.PasswordResetTokens
+                    .Where(x => x.UserId == user.Id && !x.Used)
+                    .ToListAsync();
+
+                foreach (var outstandingToken in outstandingTokens)
+                    outstandingToken.Used = true;
+
+                rawToken = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+                var tokenHash = Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
+
+                resetToken = new PasswordResetToken
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    TokenHash = tokenHash,
+                    ExpiresAt = now.AddMinutes(15),
+                    Used = false,
+                    CreatedAt = now
+                };
+
+                await _db.PasswordResetTokens.AddAsync(resetToken);
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+
+            try
+            {
+                var resetPageUrl = _configuration["Frontend:PasswordResetUrl"];
+                if (!Uri.TryCreate(resetPageUrl, UriKind.Absolute, out var resetUri) ||
+                    resetUri.Scheme != Uri.UriSchemeHttps &&
+                    !_configuration.GetValue<bool>("Frontend:AllowInsecurePasswordResetUrl"))
+                {
+                    // Never construct a reset link from an untrusted Host header.
+                    await InvalidatePasswordResetTokenAsync(resetToken!.Id);
+                    return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+                }
+
+                var resetUrl = QueryHelpers.AddQueryString(resetUri.ToString(), "token", rawToken!);
+                var template = _emailTemplateService.BuildPasswordReset(user!.Username, resetUrl);
+                var sent = await _emailService.SendEmail(user.Email, template.subject, template.body);
+
+                if (!sent)
+                    await InvalidatePasswordResetTokenAsync(resetToken!.Id);
+            }
+            catch
+            {
+                if (resetToken != null)
+                    await InvalidatePasswordResetTokenAsync(resetToken.Id);
+            }
+
+            return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+        }
+
+        public async Task<ResponseDTO> ResetPasswordAsync(ResetPasswordRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Token))
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "This password reset link is invalid or has expired. Request a new one."
+                };
+
+            var passwordValidation = ValidateRegistrationPassword(request.Password, request.ConfirmPassword);
+            if (passwordValidation != null)
+                return new ResponseDTO { IsSuccess = false, Message = passwordValidation };
+
+            var tokenHash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(request.Token.Trim())));
+            var now = DateTime.UtcNow;
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            // FOR UPDATE ensures simultaneous submissions cannot consume one token twice.
+            var resetToken = await _db.PasswordResetTokens
+                .FromSqlInterpolated($@"SELECT * FROM ""PasswordResetTokens"" WHERE ""TokenHash"" = {tokenHash} FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            if (resetToken == null || resetToken.Used || resetToken.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "This password reset link is invalid or has expired. Request a new one."
+                };
+            }
+
+            var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == resetToken.UserId);
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed)
+            {
+                await transaction.RollbackAsync();
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "This password reset link is invalid or has expired. Request a new one."
+                };
+            }
+
+            resetToken.Used = true;
+            user.PasswordHash = _hasher.Hash(request.Password!);
+
+            // Invalidate every other outstanding reset link for this account.
+            var otherTokens = await _db.PasswordResetTokens
+                .Where(x => x.UserId == user.Id && x.Id != resetToken.Id && !x.Used)
+                .ToListAsync();
+            foreach (var otherToken in otherTokens)
+                otherToken.Used = true;
+
+            // Revoke every active refresh-token session after a password change.
+            await _db.UserSessions
+                .Where(x => x.UserId == user.Id && !x.IsRevoked)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.IsRevoked, true)
+                    .SetProperty(x => x.RevokedAt, now)
+                    .SetProperty(x => x.LastActivityAt, now));
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return new ResponseDTO
+            {
+                IsSuccess = true,
+                Message = "Your password has been reset successfully. Please sign in again."
+            };
+        }
+
+        private async Task InvalidatePasswordResetTokenAsync(Guid tokenId)
+        {
+            try
+            {
+                var token = await _db.PasswordResetTokens.FirstOrDefaultAsync(x => x.Id == tokenId);
+                if (token != null && !token.Used)
+                {
+                    token.Used = true;
+                    await _db.SaveChangesAsync();
+                }
+            }
+            catch
+            {
+                // The outward forgot-password response remains generic.
+            }
         }
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
