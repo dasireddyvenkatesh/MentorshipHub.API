@@ -10,6 +10,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
     {
         private static readonly TimeSpan RefreshWindow = TimeSpan.FromDays(7);
         private static readonly TimeSpan MaximumSessionAge = TimeSpan.FromDays(30);
+        private const int MaxActiveSessions = 2;
         private readonly AppDbContext _db;
         private readonly IJwtTokenService _jwt;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -66,79 +67,86 @@ namespace MentorshipHub.API.Application.Classes.Auth
             await _db.SaveChangesAsync();
         }
 
-        public async Task HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken)
+        public async Task<Guid> HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken)
         {
-            var existingSession = await _db.UserSessions
+            // Serialize logins for one account so concurrent requests cannot exceed the cap.
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var lockKey = "session:" + userId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
+            var now = DateTime.UtcNow;
+            var activeSessions = await _db.UserSessions
                 .Where(x => x.UserId == userId &&
+                            !x.IsRevoked &&
                             x.RevokedAt == null &&
-                            x.ExpiresAt > DateTime.UtcNow &&
-                            x.IsRevoked == false)
-                .FirstOrDefaultAsync();
+                            x.ExpiresAt > now)
+                .OrderByDescending(x => x.LastActivityAt ?? x.CreatedAt)
+                .ThenByDescending(x => x.CreatedAt)
+                .ToListAsync();
 
             var context = _httpContextAccessor.HttpContext;
+            var ipAddress = context?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim() ?? string.Empty;
+            var userAgent = context?.Request.Headers["User-Agent"].FirstOrDefault() ?? string.Empty;
+            var requestedDeviceId = request.DeviceId ?? string.Empty;
+            var currentSession = activeSessions.FirstOrDefault(x => x.DeviceId == requestedDeviceId);
 
-            string ipAddress = context?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim() ?? string.Empty;
-            string userAgent = context?.Request.Headers["User-Agent"].FirstOrDefault() ?? string.Empty;
-
-            if (existingSession != null)
+            if (currentSession != null)
             {
-
-                if (existingSession.DeviceId == request.DeviceId)
-                {
-
-                    // SAME DEVICE → UPDATE
-                    var now = DateTime.UtcNow;
-                    // A fresh credential login starts a new maximum-age window.
-                    existingSession.CreatedAt = now;
-                    existingSession.RefreshTokenHash = _jwt.Hash(refreshToken);
-                    existingSession.ExpiresAt = now.Add(RefreshWindow);
-                    existingSession.IpAddress = ipAddress;
-                    existingSession.UserAgent = userAgent;
-                    existingSession.LastActivityAt = DateTime.UtcNow;
-                }
-                else
-                {
-                    // DIFFERENT DEVICE → REVOKE OLD + CREATE NEW
-                    existingSession.RevokedAt = DateTime.UtcNow;
-                    existingSession.IsRevoked = true;
-
-                    await _db.UserSessions.AddAsync(new UserSession
-                    {
-                        UserId = userId,
-                        CreatedAt = DateTime.UtcNow,
-                        DeviceId = request.DeviceId,
-                        DeviceName = request.DeviceName ?? string.Empty,
-                        IpAddress = ipAddress,
-                        UserAgent = userAgent,
-                        RefreshTokenHash = _jwt.Hash(refreshToken),
-                        ExpiresAt = DateTime.UtcNow.Add(RefreshWindow)
-                    });
-                }
+                // Re-authentication on an already-active device reuses that session slot.
+                currentSession.CreatedAt = now;
+                currentSession.RefreshTokenHash = _jwt.Hash(refreshToken);
+                currentSession.ExpiresAt = now.Add(RefreshWindow);
+                currentSession.DeviceName = request.DeviceName ?? currentSession.DeviceName;
+                currentSession.IpAddress = ipAddress;
+                currentSession.UserAgent = userAgent;
+                currentSession.LastActivityAt = now;
             }
             else
             {
-                await _db.UserSessions.AddAsync(new UserSession
+                currentSession = new UserSession
                 {
                     UserId = userId,
-                    CreatedAt = DateTime.UtcNow,
-                    DeviceId = request.DeviceId,
+                    CreatedAt = now,
+                    DeviceId = requestedDeviceId,
                     DeviceName = request.DeviceName ?? string.Empty,
                     IpAddress = ipAddress,
                     UserAgent = userAgent,
                     RefreshTokenHash = _jwt.Hash(refreshToken),
-                    ExpiresAt = DateTime.UtcNow.Add(RefreshWindow)
-                });
+                    ExpiresAt = now.Add(RefreshWindow),
+                    LastActivityAt = now
+                };
+                _db.UserSessions.Add(currentSession);
             }
 
             var user = await _db.Users.FindAsync(userId);
             if (user != null)
-            {
-                user.LastLoginAt = DateTime.UtcNow;
-                _db.Users.Update(user);
+                user.LastLoginAt = now;
 
+            await _db.SaveChangesAsync();
+
+            // Keep the two most recently active sessions. Older sessions are revoked
+            // atomically so their sid-bound access tokens fail on subsequent API requests.
+            var sessionsAfterLogin = await _db.UserSessions
+                .Where(x => x.UserId == userId &&
+                            !x.IsRevoked &&
+                            x.RevokedAt == null &&
+                            x.ExpiresAt > now)
+                .OrderByDescending(x => x.LastActivityAt ?? x.CreatedAt)
+                .ThenByDescending(x => x.CreatedAt)
+                .ToListAsync();
+
+            foreach (var excess in sessionsAfterLogin.Skip(MaxActiveSessions))
+            {
+                excess.IsRevoked = true;
+                excess.RevokedAt = now;
+                excess.LastActivityAt = now;
             }
 
             await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return currentSession.Id;
         }
+
     }
 }
