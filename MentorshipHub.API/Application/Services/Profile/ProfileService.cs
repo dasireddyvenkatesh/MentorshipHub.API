@@ -2,6 +2,7 @@ using MentorshipHub.API.Application.DTO.Profile;
 using MentorshipHub.API.Application.Interfaces.Profile;
 using MentorshipHub.API.Enities;
 using MentorshipHub.API.Infrastructure.EntityModels.Profile;
+using MentorshipHub.API.Infrastructure.EntityModels.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace MentorshipHub.API.Application.Services.Profile
@@ -41,7 +42,7 @@ namespace MentorshipHub.API.Application.Services.Profile
             var profile = user.Profile;
             if (profile == null)
             {
-                profile = new UserProfile { UserId = user.Id };
+                profile = new UserProfile { UserId = user.Id, FirstName = string.Empty, LastName = string.Empty };
                 _db.UserProfiles.Add(profile);
                 user.Profile = profile;
             }
@@ -60,14 +61,14 @@ namespace MentorshipHub.API.Application.Services.Profile
             return Map(user);
         }
 
-        private Task<Infrastructure.EntityModels.Identity.User?> LoadUserAsync(Guid userId)
+        private Task<User?> LoadUserAsync(Guid userId)
             => _db.Users.AsNoTracking()
                 .Include(x => x.Profile)
                 .Include(x => x.UserRoles)
                     .ThenInclude(x => x.Role)
                 .FirstOrDefaultAsync(x => x.Id == userId);
 
-        private static MyProfileResponse Map(Infrastructure.EntityModels.Identity.User user)
+        private static MyProfileResponse Map(User user)
         {
             var firstName = user.Profile?.FirstName?.Trim() ?? string.Empty;
             var lastName = user.Profile?.LastName?.Trim() ?? string.Empty;
