@@ -171,9 +171,19 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
                 public async Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request)
         {
-            var email = request.Email.Trim().ToLowerInvariant();
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.Provider) ||
+                string.IsNullOrWhiteSpace(request.ProviderId))
+            {
+                return new LoginResponse
+                {
+                    IsSuccess = false,
+                    Message = "The external identity provider did not return a valid account identifier."
+                };
+            }
 
-            // 1️⃣ Check if this external provider is already linked
+            // An already-linked provider identity is sufficient to locate its XQARE account.
+            // This preserves existing social sign-ins even if the provider no longer returns email.
             var externalLogin = await _db.ExternalLogins
                 .Include(x => x.User)
                 .ThenInclude(x => x.SecuritySetting)
@@ -181,83 +191,127 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     x.Provider == request.Provider &&
                     x.ProviderUserId == request.ProviderId);
 
-            User? user;
-
+            User user;
             if (externalLogin != null)
             {
-                // External account already linked
                 user = externalLogin.User;
             }
             else
             {
-                // 2️⃣ Check if a user already exists with this email
-                 user = await _db.Users
-                    .Include(x => x.SecuritySetting)
-                    .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
-
-                if (user == null)
+                var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+                if (!request.EmailVerified ||
+                    string.IsNullOrWhiteSpace(email) ||
+                    !new EmailAddressAttribute().IsValid(email))
                 {
-                    var memberRole = await _db.Roles.FirstOrDefaultAsync(x => x.Code == "MEMBER");
-                    if (memberRole == null)
+                    return new LoginResponse
                     {
-                        return new LoginResponse { IsSuccess = false, Message = "The default Member role is not configured. Please contact support." };
-                    }
-
-                    try
-                    {
-                        user = await CreateNewUserAsync(request, email, memberRole);
-                    }
-                    catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
-                    {
-                        // Another OAuth callback may have created this email just before this request.
-                        _db.ChangeTracker.Clear();
-                        user = await _db.Users
-                            .Include(x => x.SecuritySetting)
-                            .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
-
-                        if (user == null)
-                            throw;
-                    }
+                        IsSuccess = false,
+                        Message = "This provider did not supply a verified email address. Use email registration or an already-linked provider."
+                    };
                 }
 
-                // 3️⃣ Link the external provider
-                var newExternalLogin = new ExternalLogin
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = user.Id,
-                    Provider = request.Provider,
-                    ProviderUserId = request.ProviderId,
-                    CreatedAt = DateTime.UtcNow
-                };
+                // Never silently attach an unlinked social identity to an existing account.
+                // A separate flow must first authenticate the existing account before linking.
+                var existingUser = await _db.Users
+                    .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
-                await _db.ExternalLogins.AddAsync(newExternalLogin);
+                if (existingUser != null)
+                {
+                    return new LoginResponse
+                    {
+                        IsSuccess = false,
+                        Email = existingUser.Email,
+                        Message = "An account already exists with this email. Sign in using your existing method before linking another provider."
+                    };
+                }
+
+                var memberRole = await _db.Roles.FirstOrDefaultAsync(x => x.Code == "MEMBER");
+                if (memberRole == null)
+                {
+                    return new LoginResponse
+                    {
+                        IsSuccess = false,
+                        Message = "The default Member role is not configured. Please contact support."
+                    };
+                }
+
+                // Create the account and provider link in one transaction. This prevents
+                // a confirmed-but-unlinked orphan account if the provider link cannot be saved.
+                await using var transaction = await _db.Database.BeginTransactionAsync();
                 try
                 {
+                    var externalRequest = new ExternalLoginRequest
+                    {
+                        Provider = request.Provider,
+                        ProviderId = request.ProviderId,
+                        Email = email,
+                        EmailVerified = true,
+                        Name = string.IsNullOrWhiteSpace(request.Name)
+                            ? email.Split('@')[0]
+                            : request.Name.Trim(),
+                        Avatar = request.Avatar,
+                        DeviceId = request.DeviceId,
+                        DeviceName = request.DeviceName
+                    };
+
+                    user = await CreateNewUserAsync(externalRequest, email, memberRole);
+
+                    await _db.ExternalLogins.AddAsync(new ExternalLogin
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = user.Id,
+                        Provider = request.Provider,
+                        ProviderUserId = request.ProviderId,
+                        CreatedAt = DateTime.UtcNow
+                    });
+
                     await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
                 }
                 catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
                 {
-                    // A second OAuth callback may have inserted the provider link concurrently.
+                    await transaction.RollbackAsync();
                     _db.ChangeTracker.Clear();
+
+                    // If another callback linked this exact provider identity first,
+                    // continue with that account. Never link by email as a fallback.
                     externalLogin = await _db.ExternalLogins
                         .Include(x => x.User)
                         .ThenInclude(x => x.SecuritySetting)
-                        .FirstOrDefaultAsync(x => x.Provider == request.Provider && x.ProviderUserId == request.ProviderId);
+                        .FirstOrDefaultAsync(x =>
+                            x.Provider == request.Provider &&
+                            x.ProviderUserId == request.ProviderId);
 
-                    if (externalLogin == null)
+                    if (externalLogin != null)
+                    {
+                        user = externalLogin.User;
+                    }
+                    else
+                    {
+                        var emailOwner = await _db.Users
+                            .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
+
+                        if (emailOwner != null)
+                        {
+                            return new LoginResponse
+                            {
+                                IsSuccess = false,
+                                Email = emailOwner.Email,
+                                Message = "An account already exists with this email. Sign in using your existing method before linking another provider."
+                            };
+                        }
+
                         throw;
-
-                    user = externalLogin.User;
+                    }
                 }
             }
 
-            // 4️⃣ Prevent login if account inactive
             if (!user.IsActive)
             {
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = "Account is inactive"
+                    Message = "Account is inactive."
                 };
             }
 
@@ -279,7 +333,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 };
             }
 
-            // 5️⃣ Create session
             var loginRequest = new LoginRequest
             {
                 DeviceId = request.DeviceId,
