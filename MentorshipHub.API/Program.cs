@@ -23,6 +23,7 @@ using System.Security.Claims;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text;
+using System.Security.Cryptography.X509Certificates;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +40,31 @@ if (!string.IsNullOrWhiteSpace(appServiceHome))
         Path.Combine(appServiceHome, "ASP.NET", "DataProtection-Keys"));
     Directory.CreateDirectory(keyRingDirectory.FullName);
     dataProtectionBuilder.PersistKeysToFileSystem(keyRingDirectory);
+}
+
+ // Optional compatibility path: if the old Data Protection key ring was protected
+ // with a certificate, retain that certificate setting so legacy TOTP ciphertext
+ // can still be decrypted. New TOTP secrets use AES-GCM and do not require this.
+var legacyDataProtectionThumbprint = builder.Configuration["DataProtection:CertificateThumbprint"];
+if (!string.IsNullOrWhiteSpace(legacyDataProtectionThumbprint))
+{
+    using var certificateStore = new X509Store(StoreName.My, StoreLocation.CurrentUser);
+    certificateStore.Open(OpenFlags.ReadOnly);
+    var legacyCertificate = certificateStore.Certificates
+        .Find(
+            X509FindType.FindByThumbprint,
+            legacyDataProtectionThumbprint.Replace(" ", string.Empty, StringComparison.Ordinal),
+            validOnly: false)
+        .OfType<X509Certificate2>()
+        .FirstOrDefault();
+
+    if (legacyCertificate == null || !legacyCertificate.HasPrivateKey)
+    {
+        throw new InvalidOperationException(
+            "The configured legacy Data Protection certificate was not found with a private key.");
+    }
+
+    dataProtectionBuilder.ProtectKeysWithCertificate(legacyCertificate);
 }
 
 // Add services to the container.
