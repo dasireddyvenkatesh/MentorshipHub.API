@@ -166,11 +166,12 @@ namespace MentorshipHub.API.Presentation.Controllers
             var oauthUser = _oauthUserMapper.Map(provider, result.Principal, result.Properties);
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
-            // Fail closed when the provider does not supply a usable email/identity.
-            if (string.IsNullOrWhiteSpace(oauthUser.Email) ||
-                string.IsNullOrWhiteSpace(oauthUser.ProviderId))
+            // A provider ID is required for every sign-in. Email and its verification
+            // status are evaluated by AuthService; an already-linked identity may not
+            // need the provider to return an email on every sign-in.
+            if (string.IsNullOrWhiteSpace(oauthUser.ProviderId))
             {
-                return ExternalLoginFailure("The provider did not return a usable email and account identifier.");
+                return ExternalLoginFailure("The provider did not return a usable account identifier.");
             }
 
             var response = await _authService.ExternalLoginAsync(oauthUser);
