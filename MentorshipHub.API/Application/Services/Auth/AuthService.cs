@@ -332,12 +332,25 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<LoginResponse> VerifyRegisterEmailOtp(VerifyEmailOtpRequest request)
         {
+            if (request == null)
+                return new LoginResponse { IsSuccess = false, Message = "Registration verification details are required." };
+
             var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.OtpCode))
                 return new LoginResponse { IsSuccess = false, Message = "Email and verification code are required." };
 
+            var passwordValidation = ValidateRegistrationPassword(request.Password, request.ConfirmPassword);
+            if (passwordValidation != null)
+                return new LoginResponse { IsSuccess = false, Message = passwordValidation };
+
+            // Serialize OTP consumption and OTP regeneration for this email.
+            // GenerateEmailVerificationOtp uses the same PostgreSQL advisory lock.
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({email}))");
+
             var now = DateTime.UtcNow;
-            var otp = await _db.EmailVerificationOtps.FirstOrDefaultAsync(x => x.Email.ToLower() == email);
+            var otp = await _db.EmailVerificationOtps
+                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (otp == null)
                 return new LoginResponse { IsSuccess = false, Message = "OTP not found. Request a new verification code." };
@@ -369,16 +382,18 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 {
                     otp.LockedUntil = now.AddHours(24);
                     await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
                     return new LoginResponse { IsSuccess = false, Message = "Too many incorrect attempts. Try again in 24 hours." };
                 }
 
                 await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return new LoginResponse { IsSuccess = false, Message = $"Invalid OTP. {remainingAttempts} attempt(s) remaining." };
             }
 
             var user = await _db.Users
                 .Include(x => x.SecuritySetting)
-                .FirstOrDefaultAsync(x => x.Email == email);
+                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (user == null)
                 return new LoginResponse { IsSuccess = false, Message = "User not found." };
@@ -389,9 +404,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (user.IsEmailConfirmed)
                 return new LoginResponse { IsSuccess = false, Message = "Email is already verified. Please sign in." };
 
-            otp.IsUsed = true;
+            // The person proving control of the mailbox chooses the final password.
+            // This replaces any password stored by an earlier unverified registration attempt.
+            user.PasswordHash = _hasher.Hash(request.Password!);
             user.IsEmailConfirmed = true;
+            otp.IsUsed = true;
+
             await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             if (user.SecuritySetting?.MfaEnabled == true)
             {
@@ -690,6 +710,27 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
 
             return false;
+        }
+
+
+        private static string? ValidateRegistrationPassword(string? password, string? confirmPassword)
+        {
+            if (string.IsNullOrWhiteSpace(password))
+                return "Password is required.";
+
+            if (password.Length < 8 ||
+                !password.Any(char.IsUpper) ||
+                !password.Any(char.IsLower) ||
+                !password.Any(char.IsDigit) ||
+                !password.Any(c => !char.IsLetterOrDigit(c)))
+            {
+                return "Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.";
+            }
+
+            if (!string.Equals(password, confirmPassword, StringComparison.Ordinal))
+                return "Passwords do not match.";
+
+            return null;
         }
 
         private static string? ValidateRegistrationRequest(RegisterRequest request)
