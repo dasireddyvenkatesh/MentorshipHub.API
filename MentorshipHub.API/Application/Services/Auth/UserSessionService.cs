@@ -70,7 +70,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<Guid> HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken)
         {
             // Serialize logins for one account so concurrent requests cannot exceed the cap.
-            await using var transaction = await _db.Database.BeginTransactionAsync();
+            // MFA verification already owns a transaction while it locks/consumes the
+            // challenge and TOTP credential. Reuse it instead of opening a nested
+            // transaction on the same DbContext connection.
+            await using var transaction = _db.Database.CurrentTransaction == null
+                ? await _db.Database.BeginTransactionAsync()
+                : null;
+
             var lockKey = "session:" + userId.ToString("N");
             await _db.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
@@ -144,7 +150,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
 
             await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
+            if (transaction != null)
+                await transaction.CommitAsync();
+
             return currentSession.Id;
         }
 
