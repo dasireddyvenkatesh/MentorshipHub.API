@@ -52,17 +52,17 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (relatedRecordsError != null)
                 return new LoginResponse { IsSuccess = false, Message = relatedRecordsError };
 
-            // EMAIL VERIFICATION
+            // Pending registrations must be completed through Register so the person
+            // proving mailbox ownership can choose the final password. Do not let the
+            // login OTP endpoint confirm an account created by an unverified registrant.
             if (!user.IsEmailConfirmed)
             {
-                var otpResponse = await _otp.GenerateEmailVerificationOtp(user.Username, user.Email);
-
                 return new LoginResponse
                 {
-                    IsSuccess = otpResponse.IsSuccess,
-                    RequiresEmailVerification = true,
+                    IsSuccess = false,
+                    RequiresEmailVerification = false,
                     Email = user.Email,
-                    Message = otpResponse.Message
+                    Message = "Your registration is not complete. Choose Create one free to verify your email and set your password."
                 };
             }
 
@@ -117,7 +117,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 Id = Guid.NewGuid(),
                 Username = request.FullName,
                 Email = email,
-                PasswordHash = _hasher.Hash(request.Password),
+                // Do not store a usable password until the mailbox owner completes OTP verification.
+                PasswordHash = null,
                 IsEmailConfirmed = false,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
@@ -546,6 +547,15 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (!user.IsActive)
                 return new LoginResponse { IsSuccess = false, Message = "Account is inactive." };
 
+            if (!user.IsEmailConfirmed)
+            {
+                return new LoginResponse
+                {
+                    IsSuccess = false,
+                    Message = "This account is still awaiting registration. Complete verification from the Register page to set your password."
+                };
+            }
+
             otp.IsUsed = true;
             user.IsEmailConfirmed = true;
             await _db.SaveChangesAsync();
@@ -698,6 +708,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var repairError = await EnsureUserRelatedRecordsAsync(existingUser);
             if (repairError != null)
                 return new RegisterResponse { IsSuccess = false, Email = existingUser.Email, Message = repairError };
+
+            // Remove any password captured by an earlier unverified registration attempt.
+            // The mailbox owner will choose the final password when they verify the OTP.
+            if (existingUser.PasswordHash != null)
+            {
+                existingUser.PasswordHash = null;
+                await _db.SaveChangesAsync();
+            }
 
             var otpResponse = await _otp.GenerateEmailVerificationOtp(
                 existingUser.Username, existingUser.Email, true);
