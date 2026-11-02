@@ -154,7 +154,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new TotpStatusResponse
             {
                 IsSuccess = true, Message = "Authenticator status retrieved.",
-                IsEnabled = credential?.IsEnabled == true, EnabledAt = credential?.EnabledAt,
+                IsEnabled = credential?.IsEnabled == true, CanEnroll = _protector.IsProtectionConfigured,
+                EnabledAt = credential?.EnabledAt,
                 RecoveryCodesRemaining = remaining
             };
         }
