@@ -620,6 +620,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         }
 
+        private async Task<LoginResponse> CreateMfaChallengeAsync(User user, LoginRequest loginRequest)
+        {
             if (!await _totp.IsEnabledAsync(user.Id))
             {
                 return new LoginResponse
