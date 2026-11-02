@@ -17,7 +17,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             _config = config;
         }
 
-        public string GenerateAccessToken(User user, IList<string> roles, IList<string> permissions)
+        public string GenerateAccessToken(User user, IList<string> roles, IList<string> permissions, Guid sessionId)
         {
             var key = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
@@ -28,7 +28,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim("uid", user.Id.ToString())
+                new Claim("uid", user.Id.ToString()),
+                new Claim("sid", sessionId.ToString())
             };
 
             claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
