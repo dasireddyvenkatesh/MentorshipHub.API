@@ -66,7 +66,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
             else
             {
-                credential.PendingEncryptedSecret = _protector.Protect(secret);
+                credential.PendingEncryptedSecret = _protector.Protect(secret, userId);
                 credential.PendingEnrollmentExpiresAt = now.AddMinutes(10);
             }
 
@@ -106,7 +106,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now)
                 return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Authenticator setup is temporarily locked. Try again later." };
 
-            var matchedStep = FindMatchingTimeStep(_protector.Unprotect(credential.PendingEncryptedSecret, userId), code, now);
+            var pendingSecret = _protector.Unprotect(credential.PendingEncryptedSecret, userId);
+            var matchedStep = FindMatchingTimeStep(pendingSecret, code, now);
             if (matchedStep == null)
             {
                 RegisterFailedAttempt(credential, now);
@@ -121,7 +122,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 };
             }
 
-            credential.EncryptedSecret = _protector.Protect(secret, userId);
+            credential.EncryptedSecret = _protector.Protect(pendingSecret, userId);
             credential.PendingEncryptedSecret = null;
             credential.PendingEnrollmentExpiresAt = null;
             credential.IsEnabled = true;
@@ -194,7 +195,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var encryptedSecret = credential.EncryptedSecret;
             var secret = _protector.Unprotect(encryptedSecret, userId);
             var step = FindMatchingTimeStep(secret, code, now);
-            var needsReprotection = !_protector.IsUsingActiveKey(encryptedSecret);
+            var needsReprotection = _protector.IsProtectionConfigured && !_protector.IsUsingActiveKey(encryptedSecret);
             if (step == null || (credential.LastAcceptedTimeStep.HasValue && step.Value <= credential.LastAcceptedTimeStep.Value))
             {
                 if (needsReprotection)

@@ -11,7 +11,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
     /// Azure App Service settings. The Data Protection protector is retained only
     /// to decrypt legacy values created before the AES-GCM format was introduced.
     /// </summary>
-    public sealed class TotpSecretProtector : ITotpSecretProtector
+    public sealed class TotpSecretProtector : ITotpSecretProtector, IDisposable
     {
         private const string FormatPrefix = "xqare:aesgcm:";
         private const int KeySizeBytes = 32;
@@ -190,6 +190,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
                    parts[2] == FormatVersion &&
                    int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out var version) &&
                    version == _activeKeyVersion;
+        }
+
+        public void Dispose()
+        {
+            foreach (var key in _keys.Values)
+                CryptographicOperations.ZeroMemory(key);
         }
 
         private static byte[] CreateAssociatedData(Guid userId, int keyVersion)

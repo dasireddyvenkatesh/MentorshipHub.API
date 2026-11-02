@@ -23,17 +23,15 @@ using System.Security.Claims;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text;
-using System.Security.Cryptography.X509Certificates;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Persist the Data Protection key ring in the App Service shared HOME directory.
-// Configure DataProtection:CertificateThumbprint and load that certificate into the
-// App Service CurrentUser\\My store before enabling TOTP in a deployed environment.
+// Keep the Data Protection key ring available only for reading secrets encrypted
+// by the previous TOTP implementation. New TOTP secrets use AES-256-GCM with keys
+// supplied through Totp:ActiveKeyVersion and Totp:EncryptionKeys:{version}.
 var dataProtectionBuilder = builder.Services.AddDataProtection()
     .SetApplicationName("XQARE.MentorshipHub.API");
 
-var dataProtectionCertificateThumbprint = builder.Configuration["DataProtection:CertificateThumbprint"];
 var appServiceHome = Environment.GetEnvironmentVariable("HOME");
 if (!string.IsNullOrWhiteSpace(appServiceHome))
 {
@@ -41,25 +39,6 @@ if (!string.IsNullOrWhiteSpace(appServiceHome))
         Path.Combine(appServiceHome, "ASP.NET", "DataProtection-Keys"));
     Directory.CreateDirectory(keyRingDirectory.FullName);
     dataProtectionBuilder.PersistKeysToFileSystem(keyRingDirectory);
-}
-
-if (!string.IsNullOrWhiteSpace(dataProtectionCertificateThumbprint))
-{
-    using var certificateStore = new X509Store(StoreName.My, StoreLocation.CurrentUser);
-    certificateStore.Open(OpenFlags.ReadOnly);
-    var certificate = certificateStore.Certificates
-        .Find(
-            X509FindType.FindByThumbprint,
-            dataProtectionCertificateThumbprint.Replace(" ", string.Empty, StringComparison.Ordinal),
-            validOnly: false)
-        .OfType<X509Certificate2>()
-        .FirstOrDefault();
-
-    if (certificate == null || !certificate.HasPrivateKey)
-        throw new InvalidOperationException(
-            "The configured DataProtection:CertificateThumbprint was not found with a private key in CurrentUser\\My.");
-
-    dataProtectionBuilder.ProtectKeysWithCertificate(certificate);
 }
 
 // Add services to the container.
