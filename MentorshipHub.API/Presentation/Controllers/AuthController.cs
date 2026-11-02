@@ -271,6 +271,12 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             var response = await _authService.VerifyRegisterEmailOtp(request);
 
+            if (response.IsSuccess && !string.IsNullOrWhiteSpace(response.MfaChallengeToken))
+            {
+                SetMfaChallengeCookie(response.MfaChallengeToken);
+                response.MfaChallengeToken = null;
+            }
+
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
                 SetRefreshTokenCookie(response.RefreshToken);
@@ -286,6 +292,12 @@ namespace MentorshipHub.API.Presentation.Controllers
         public async Task<IActionResult> VerifyEmailOtp([FromBody] VerifyEmailOtpRequest request)
         {
             var response = await _authService.VerifyEmailOtp(request);
+
+            if (response.IsSuccess && !string.IsNullOrWhiteSpace(response.MfaChallengeToken))
+            {
+                SetMfaChallengeCookie(response.MfaChallengeToken);
+                response.MfaChallengeToken = null;
+            }
 
             if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
             {
