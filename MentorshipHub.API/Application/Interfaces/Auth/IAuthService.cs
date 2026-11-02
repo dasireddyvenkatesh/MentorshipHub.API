@@ -10,7 +10,6 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task<ResponseDTO> ResetPasswordAsync(ResetPasswordRequest request);
         Task<EmailOtpResponse> ResendEmailOtp(EmailOtpRequest request);
         Task<LoginResponse> VerifyMfaChallengeAsync(VerifyMfaChallengeRequest request, string challengeToken);
-        Task<MfaOtpResponse> ResendMfaChallengeAsync(string challengeToken);
         Task<TotpEnrollmentStartResponse> StartTotpEnrollmentAsync(Guid userId, TotpEnrollmentStartRequest request);
         Task<TotpEnrollmentConfirmResponse> ConfirmTotpEnrollmentAsync(Guid userId, TotpEnrollmentConfirmRequest request);
         Task<TotpStatusResponse> GetTotpStatusAsync(Guid userId);
