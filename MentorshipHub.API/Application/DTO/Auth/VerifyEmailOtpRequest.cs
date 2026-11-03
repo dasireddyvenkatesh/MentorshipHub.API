@@ -11,11 +11,4 @@
         public string? Password { get; set; }
         public string? ConfirmPassword { get; set; }
     }
-    /// <summary>
-    /// Registration-only email verification request. Password and confirmation
-    /// are mandatory for this flow; login email verification uses VerifyEmailOtpRequest.
-    /// </summary>
-    public sealed class VerifyRegisterEmailOtpRequest : VerifyEmailOtpRequest
-    {
-    }
 }
