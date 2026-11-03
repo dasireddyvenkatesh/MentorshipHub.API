@@ -33,7 +33,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (address.IsIPv4MappedToIPv6)
                 address = address.MapToIPv4();
 
-            return address.ToString();
+            // Do not manufacture an IPv4 value from a native IPv6 connection.
+            return address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                ? address.ToString()
+                : string.Empty;
         }
 
         public async Task<UserSession?> GetByTokenAsync(string refreshToken)
