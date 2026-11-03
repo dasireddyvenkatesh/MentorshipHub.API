@@ -9,7 +9,7 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task CreateAsync(UserSession session);
         Task RotateAsync(UserSession session, string newRefreshToken);
         Task RevokeAsync(string refreshToken);
-        Task<List<UserSession>> GetActiveSessionsAsync(Guid userId);
+        Task<List<UserSession>> GetActiveSessionsAsync(Guid userId, Guid currentSessionId);
         Task<bool> RevokeSessionAsync(Guid userId, Guid sessionId);
         Task<int> RevokeOtherSessionsAsync(Guid userId, Guid currentSessionId);
         Task<Guid> HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken);

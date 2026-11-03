@@ -10,7 +10,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
     {
         private static readonly TimeSpan RefreshWindow = TimeSpan.FromDays(7);
         private static readonly TimeSpan MaximumSessionAge = TimeSpan.FromDays(30);
-        private const int MaxActiveSessions = 1;
+        private const int MaxActiveSessions = 2;
         private readonly AppDbContext _db;
         private readonly IJwtTokenService _jwt;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -20,6 +20,20 @@ namespace MentorshipHub.API.Application.Classes.Auth
             _db = db;
             _jwt = jwt;
             _httpContextAccessor = httpContextAccessor;
+        }
+
+        // Use the address normalized by ASP.NET Core Forwarded Headers middleware.
+        // Never read X-Forwarded-For directly: that request header can be client-controlled.
+        private string GetClientIpAddress()
+        {
+            var address = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress;
+            if (address == null)
+                return string.Empty;
+
+            if (address.IsIPv4MappedToIPv6)
+                address = address.MapToIPv4();
+
+            return address.ToString();
         }
 
         public async Task<UserSession?> GetByTokenAsync(string refreshToken)
@@ -48,6 +62,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 : absoluteExpiry;
             session.LastActivityAt = now;
 
+            var currentIpAddress = GetClientIpAddress();
+            if (!string.IsNullOrWhiteSpace(currentIpAddress))
+                session.IpAddress = currentIpAddress;
+
             await _db.SaveChangesAsync();
         }
 
@@ -67,10 +85,28 @@ namespace MentorshipHub.API.Application.Classes.Auth
             await _db.SaveChangesAsync();
         }
 
-        public Task<List<UserSession>> GetActiveSessionsAsync(Guid userId)
+        public async Task<List<UserSession>> GetActiveSessionsAsync(Guid userId, Guid currentSessionId)
         {
+            var currentIpAddress = GetClientIpAddress();
+            if (!string.IsNullOrWhiteSpace(currentIpAddress))
+            {
+                var currentSession = await _db.UserSessions.FirstOrDefaultAsync(x =>
+                    x.Id == currentSessionId &&
+                    x.UserId == userId &&
+                    !x.IsRevoked &&
+                    x.RevokedAt == null);
+
+                if (currentSession != null &&
+                    !string.Equals(currentSession.IpAddress, currentIpAddress, StringComparison.Ordinal))
+                {
+                    currentSession.IpAddress = currentIpAddress;
+                    currentSession.LastActivityAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
+            }
+
             var now = DateTime.UtcNow;
-            return _db.UserSessions.AsNoTracking()
+            return await _db.UserSessions.AsNoTracking()
                 .Where(x => x.UserId == userId &&
                             !x.IsRevoked &&
                             x.RevokedAt == null &&
@@ -139,7 +175,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 .ToListAsync();
 
             var context = _httpContextAccessor.HttpContext;
-            var ipAddress = context?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim() ?? string.Empty;
+            var ipAddress = GetClientIpAddress();
             var userAgent = context?.Request.Headers["User-Agent"].FirstOrDefault() ?? string.Empty;
             var requestedDeviceId = request.DeviceId ?? string.Empty;
             var currentSession = activeSessions.FirstOrDefault(x => x.DeviceId == requestedDeviceId);

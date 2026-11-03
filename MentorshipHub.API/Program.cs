@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,16 @@ using System.Text.Json;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Process only the proxy headers needed for the original client address and scheme.
+// ASP.NET Core's hosting integration supplies the trusted local proxy configuration;
+// do not clear KnownProxies/KnownNetworks or trust arbitrary forwarded headers.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+});
 
 // ASP.NET Core Data Protection remains enabled for OAuth authentication cookies.
 // TOTP secrets use only versioned AES-256-GCM keys from Totp:EncryptionKeys.

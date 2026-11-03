@@ -319,7 +319,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!userId.HasValue || !currentSessionId.HasValue)
                 return Unauthorized();
 
-            var sessions = await _userSessionService.GetActiveSessionsAsync(userId.Value);
+            var sessions = await _userSessionService.GetActiveSessionsAsync(userId.Value, currentSessionId.Value);
             return Ok(new ActiveSessionsResponse
             {
                 IsSuccess = true,
