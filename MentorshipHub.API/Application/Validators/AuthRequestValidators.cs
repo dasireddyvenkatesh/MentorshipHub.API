@@ -140,25 +140,38 @@ public sealed class VerifyEmailOtpRequestValidator : AbstractValidator<VerifyEma
 
         RuleFor(x => x.DeviceId).MaximumLength(256);
         RuleFor(x => x.DeviceName).MaximumLength(256);
+    }
+}
 
-        // Password fields are only sent by the registration-verification endpoint.
-        // Login email verification must not require a password here.
-        When(x => x.Password is not null || x.ConfirmPassword is not null, () =>
-        {
-            RuleFor(x => x.Password)
-                .NotEmpty().WithMessage("Password is required.")
-                .MinimumLength(8).WithMessage("Password must be at least 8 characters.")
-                .MaximumLength(128)
-                .Matches("[A-Z]").WithMessage("Include at least one uppercase letter.")
-                .Matches("[a-z]").WithMessage("Include at least one lowercase letter.")
-                .Matches("[0-9]").WithMessage("Include at least one number.")
-                .Matches(@"[\W_]").WithMessage("Include at least one symbol.");
+public sealed class VerifyRegisterEmailOtpRequestValidator : AbstractValidator<VerifyRegisterEmailOtpRequest>
+{
+    public VerifyRegisterEmailOtpRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("Enter a valid email address.")
+            .MaximumLength(256);
 
-            RuleFor(x => x.ConfirmPassword)
-                .NotEmpty().WithMessage("Confirm your password.")
-                .Equal(x => x.Password).WithMessage("Passwords do not match.")
-                .MaximumLength(128);
-        });
+        RuleFor(x => x.OtpCode)
+            .NotEmpty().WithMessage("Verification code is required.")
+            .Matches(@"^\d{6}$").WithMessage("OTP must contain exactly six digits.");
+
+        RuleFor(x => x.DeviceId).MaximumLength(256);
+        RuleFor(x => x.DeviceName).MaximumLength(256);
+
+        RuleFor(x => x.Password)
+            .NotEmpty().WithMessage("Password is required.")
+            .MinimumLength(8).WithMessage("Password must be at least 8 characters.")
+            .MaximumLength(128).WithMessage("Password cannot exceed 128 characters.")
+            .Matches("[A-Z]").WithMessage("Include at least one uppercase letter.")
+            .Matches("[a-z]").WithMessage("Include at least one lowercase letter.")
+            .Matches("[0-9]").WithMessage("Include at least one number.")
+            .Matches(@"[\W_]").WithMessage("Include at least one symbol.");
+
+        RuleFor(x => x.ConfirmPassword)
+            .NotEmpty().WithMessage("Confirm your password.")
+            .Equal(x => x.Password).WithMessage("Passwords do not match.")
+            .MaximumLength(128);
     }
 }
 
