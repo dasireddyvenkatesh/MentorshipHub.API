@@ -98,6 +98,20 @@ public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPassw
     }
 }
 
+
+public sealed class ForgotPasswordRequestValidator : AbstractValidator<ForgotPasswordRequest>
+{
+    public ForgotPasswordRequestValidator()
+    {
+        // Only validate address syntax. The endpoint still returns the same
+        // generic success message for valid addresses whether or not an account exists.
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("Enter a valid email address.")
+            .MaximumLength(256);
+    }
+}
+
 public sealed class EmailOtpRequestValidator : AbstractValidator<EmailOtpRequest>
 {
     public EmailOtpRequestValidator()
