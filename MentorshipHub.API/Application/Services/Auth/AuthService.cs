@@ -1154,8 +1154,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(request.FullName))
                 return "Full name is required.";
 
-            if (request.FullName.Trim().Length > 25)
-                return "Full name must be 25 characters or fewer.";
+            if (request.FullName.Trim().Length > 100)
+                return "Full name must be 100 characters or fewer.";
 
             var email = request.Email?.Trim();
             if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
