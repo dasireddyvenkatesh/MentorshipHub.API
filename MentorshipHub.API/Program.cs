@@ -1,4 +1,10 @@
+using FluentValidation;
 using MentorshipHub.API.Application.Classes.Auth;
+using MentorshipHub.API.Application.DTO.Auth;
+using MentorshipHub.API.Application.DTO.ContactUs;
+using MentorshipHub.API.Application.DTO.Profile;
+using MentorshipHub.API.Application.Validators;
+using MentorshipHub.API.Presentation.Filters;
 using MentorshipHub.API.Application.Classes.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Commom;
@@ -226,6 +232,24 @@ builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IPublicIdService, SqidsService>();
 builder.Services.AddScoped<IOAuthUserMapper, OAuthUserMapper>();
 builder.Services.AddScoped<IContactService, ContactService>();
+
+// Enforce request validation at the API boundary. UI validation is only a convenience;
+// every HTTP client receives the same server-side field checks.
+builder.Services.AddScoped<FluentValidationActionFilter>();
+builder.Services.AddScoped<IValidator<RegisterRequest>, RegisterRequestValidator>();
+builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
+builder.Services.AddScoped<IValidator<ChangePasswordRequest>, ChangePasswordRequestValidator>();
+builder.Services.AddScoped<IValidator<ResetPasswordRequest>, ResetPasswordRequestValidator>();
+builder.Services.AddScoped<IValidator<EmailOtpRequest>, EmailOtpRequestValidator>();
+builder.Services.AddScoped<IValidator<VerifyEmailOtpRequest>, VerifyEmailOtpRequestValidator>();
+builder.Services.AddScoped<IValidator<VerifyMfaChallengeRequest>, VerifyMfaChallengeRequestValidator>();
+builder.Services.AddScoped<IValidator<TotpEnrollmentStartRequest>, TotpEnrollmentStartRequestValidator>();
+builder.Services.AddScoped<IValidator<TotpEnrollmentConfirmRequest>, TotpEnrollmentConfirmRequestValidator>();
+builder.Services.AddScoped<IValidator<TotpDisableRequest>, TotpDisableRequestValidator>();
+builder.Services.AddScoped<IValidator<TotpRecoveryCodesRegenerateRequest>, TotpRecoveryCodesRegenerateRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateMyProfileRequest>, UpdateMyProfileRequestValidator>();
+builder.Services.AddScoped<IValidator<ContactUsRequest>, ContactUsRequestValidator>();
+
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddRateLimiter(options =>
@@ -251,7 +275,7 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 
