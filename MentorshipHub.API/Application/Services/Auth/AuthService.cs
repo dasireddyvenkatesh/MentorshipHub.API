@@ -379,6 +379,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return (null, false);
             }
 
+            // Upgrade legacy raw BCrypt hashes after a successful password check.
+            // New hashes use the versioned SHA384-enhanced scheme and support the full
+            // password input instead of BCrypt's 72-byte raw-input limit.
+            if (_hasher.NeedsRehash(user.PasswordHash))
+                user.PasswordHash = _hasher.Hash(password);
+
             // A successful primary factor resets consecutive password failures.
             security.AccessFailedCount = 0;
             security.LockoutEnd = null;
