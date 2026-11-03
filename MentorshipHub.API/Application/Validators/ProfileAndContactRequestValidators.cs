@@ -9,14 +9,24 @@ public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMy
     public UpdateMyProfileRequestValidator()
     {
         RuleFor(x => x.FirstName)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("First name is required.")
-            .MaximumLength(80);
+            .MaximumLength(80)
+            .Matches(NameValidationRules.Pattern)
+            .WithMessage("First name can contain letters, spaces, apostrophes and hyphens only.");
 
         RuleFor(x => x.LastName)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("Last name is required.")
-            .MaximumLength(80);
+            .MaximumLength(80)
+            .Matches(NameValidationRules.Pattern)
+            .WithMessage("Last name can contain letters, spaces, apostrophes and hyphens only.");
 
-        RuleFor(x => x.PhoneNumber).MaximumLength(32);
+        RuleFor(x => x.PhoneNumber)
+            .Must(value => string.IsNullOrWhiteSpace(value) ||
+                           System.Text.RegularExpressions.Regex.IsMatch(
+                               value.Trim(), NameValidationRules.IndianMobilePattern))
+            .WithMessage("Enter a valid Indian mobile number (10 digits, optionally with +91).");
         RuleFor(x => x.Bio).MaximumLength(600);
     }
 }
@@ -26,8 +36,11 @@ public sealed class ContactUsRequestValidator : AbstractValidator<ContactUsReque
     public ContactUsRequestValidator()
     {
         RuleFor(x => x.FullName)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("Full name is required.")
-            .MaximumLength(100);
+            .MaximumLength(100)
+            .Matches(NameValidationRules.Pattern)
+            .WithMessage("Full name can contain letters, spaces, apostrophes and hyphens only.");
 
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("Email is required.")
