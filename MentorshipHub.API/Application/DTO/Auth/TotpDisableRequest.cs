@@ -1,8 +1,15 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace MentorshipHub.API.Application.DTO.Auth
 {
-    public class TotpDisableRequest
+    public sealed class TotpDisableRequest
     {
+        [Required]
+        [StringLength(128)]
         public string CurrentPassword { get; set; } = string.Empty;
+
+        [Required]
+        [RegularExpression(@"^\d{6}$", ErrorMessage = "The authenticator code must contain exactly six digits.")]
         public string Code { get; set; } = string.Empty;
     }
 }

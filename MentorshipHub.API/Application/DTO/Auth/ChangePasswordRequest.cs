@@ -5,6 +5,7 @@ namespace MentorshipHub.API.Application.DTO.Auth
     public sealed class ChangePasswordRequest
     {
         [Required]
+        [StringLength(128)]
         public string CurrentPassword { get; set; } = string.Empty;
 
         [Required]
@@ -12,6 +13,7 @@ namespace MentorshipHub.API.Application.DTO.Auth
         public string NewPassword { get; set; } = string.Empty;
 
         [Required]
+        [StringLength(128)]
         public string ConfirmPassword { get; set; } = string.Empty;
     }
 }
