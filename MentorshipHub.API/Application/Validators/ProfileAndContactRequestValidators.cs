@@ -26,7 +26,7 @@ public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMy
             .Must(value => string.IsNullOrWhiteSpace(value) ||
                            System.Text.RegularExpressions.Regex.IsMatch(
                                value.Trim(), NameValidationRules.IndianMobilePattern))
-            .WithMessage("Enter a valid Indian mobile number (10 digits, optionally with +91).");
+            .WithMessage("Enter a valid Indian mobile number (10 digits, optionally with +91 or 0 prefix).");
         RuleFor(x => x.Bio).MaximumLength(600);
     }
 }
