@@ -10,7 +10,7 @@ public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest
         RuleFor(x => x.FullName)
             .Must(value => !string.IsNullOrWhiteSpace(value))
             .WithMessage("Full name is required.")
-            .MaximumLength(25).WithMessage("Full name must be 25 characters or fewer.")
+            .MaximumLength(100).WithMessage("Full name must be 100 characters or fewer.")
             .Matches(NameValidationRules.Pattern)
             .WithMessage("Full name can contain letters, spaces, apostrophes and hyphens only.");
 
@@ -182,7 +182,7 @@ public sealed class VerifyMfaChallengeRequestValidator : AbstractValidator<Verif
             .Must((request, value) =>
             {
                 var code = value?.Trim() ?? string.Empty;
-                var factor = request.Factor.Trim().ToLowerInvariant();
+                var factor = (request.Factor ?? string.Empty).Trim().ToLowerInvariant();
                 var normalized = new string(code.Where(char.IsLetterOrDigit).ToArray());
 
                 if (factor == "recovery")
