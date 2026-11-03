@@ -10,7 +10,9 @@ public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest
         RuleFor(x => x.FullName)
             .Must(value => !string.IsNullOrWhiteSpace(value))
             .WithMessage("Full name is required.")
-            .MaximumLength(25).WithMessage("Full name must be 25 characters or fewer.");
+            .MaximumLength(100).WithMessage("Full name must be 100 characters or fewer.")
+            .Matches(NameValidationRules.Pattern)
+            .WithMessage("Full name can contain letters, spaces, apostrophes and hyphens only.");
 
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("Email is required.")
@@ -165,24 +167,30 @@ public sealed class VerifyMfaChallengeRequestValidator : AbstractValidator<Verif
     public VerifyMfaChallengeRequestValidator()
     {
         RuleFor(x => x.Factor)
-            .Must(value => string.IsNullOrWhiteSpace(value) || new[] { "auto", "totp", "recovery" }
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty().WithMessage("Choose a verification method.")
+            .Must(value => new[] { "auto", "totp", "recovery" }
                 .Contains(value.Trim(), StringComparer.OrdinalIgnoreCase))
             .WithMessage("Choose a supported verification method.");
 
         RuleFor(x => x.ChallengeToken).MaximumLength(512);
 
         RuleFor(x => x.Code)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("A verification code is required.")
+            .MaximumLength(36).WithMessage("The verification code is too long.")
             .Must((request, value) =>
             {
                 var code = value?.Trim() ?? string.Empty;
-                var factor = request.Factor?.Trim().ToLowerInvariant();
+                var factor = (request.Factor ?? string.Empty).Trim().ToLowerInvariant();
+                var normalized = new string(code.Where(char.IsLetterOrDigit).ToArray());
 
                 if (factor == "recovery")
-                {
-                    var normalized = new string(code.Where(char.IsLetterOrDigit).ToArray());
                     return normalized.Length >= 20 && normalized.Length <= 36;
-                }
+
+                if (factor == "auto")
+                    return (code.Length == 6 && code.All(char.IsDigit)) ||
+                           (normalized.Length >= 20 && normalized.Length <= 36);
 
                 return code.Length == 6 && code.All(char.IsDigit);
             })
