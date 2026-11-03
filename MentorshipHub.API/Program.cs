@@ -243,6 +243,7 @@ builder.Services.AddScoped<IValidator<ResetPasswordRequest>, ResetPasswordReques
 builder.Services.AddScoped<IValidator<ForgotPasswordRequest>, ForgotPasswordRequestValidator>();
 builder.Services.AddScoped<IValidator<EmailOtpRequest>, EmailOtpRequestValidator>();
 builder.Services.AddScoped<IValidator<VerifyEmailOtpRequest>, VerifyEmailOtpRequestValidator>();
+builder.Services.AddScoped<IValidator<VerifyRegisterEmailOtpRequest>, VerifyRegisterEmailOtpRequestValidator>();
 builder.Services.AddScoped<IValidator<VerifyMfaChallengeRequest>, VerifyMfaChallengeRequestValidator>();
 builder.Services.AddScoped<IValidator<TotpEnrollmentStartRequest>, TotpEnrollmentStartRequestValidator>();
 builder.Services.AddScoped<IValidator<TotpEnrollmentConfirmRequest>, TotpEnrollmentConfirmRequestValidator>();
