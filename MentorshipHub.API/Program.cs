@@ -4,12 +4,10 @@ using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Commom;
 using MentorshipHub.API.Application.Interfaces.Contact;
 using MentorshipHub.API.Application.Interfaces.Profile;
-//using MentorshipHub.API.Application.Interfaces.Dashboard;
 using MentorshipHub.API.Application.Interfaces.Email;
 using MentorshipHub.API.Application.Services.Auth;
 using MentorshipHub.API.Application.Services.Contact;
 using MentorshipHub.API.Application.Services.Profile;
-//using MentorshipHub.API.Application.Services.Dashboard;
 using MentorshipHub.API.Application.Services.Email;
 using MentorshipHub.API.Enities;
 using Microsoft.AspNetCore.Authentication;
@@ -19,7 +17,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
@@ -66,9 +63,6 @@ if (!string.IsNullOrWhiteSpace(appServiceHome))
 builder.Services.AddDbContext<AppDbContext>(options =>
     
 options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-//builder.Services.AddDbContext<AppDbContext>(options =>
-//    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddAuthentication(options =>
 {
@@ -232,7 +226,6 @@ builder.Services.AddScoped<IOtpService, OtpService>();
 builder.Services.AddScoped<IPublicIdService, SqidsService>();
 builder.Services.AddScoped<IOAuthUserMapper, OAuthUserMapper>();
 builder.Services.AddScoped<IContactService, ContactService>();
-//builder.Services.AddScoped<IGetDashboardService, GetDashboardService>();
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddRateLimiter(options =>
