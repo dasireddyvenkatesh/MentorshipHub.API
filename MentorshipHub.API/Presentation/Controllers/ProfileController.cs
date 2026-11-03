@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using MentorshipHub.API.Application.DTO.Profile;
 using MentorshipHub.API.Application.Interfaces.Profile;
+using MentorshipHub.API.Application.Validators;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
