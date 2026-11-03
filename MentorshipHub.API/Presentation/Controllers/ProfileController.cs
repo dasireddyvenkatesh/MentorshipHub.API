@@ -37,6 +37,9 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!Guid.TryParse(User.FindFirst("uid")?.Value, out var userId))
                 return Unauthorized(new { isSuccess = false, message = "The authenticated user identity is invalid." });
 
+            // Store valid Indian mobile numbers in one canonical +91 format.
+            request.PhoneNumber = NameValidationRules.NormalizeIndianMobile(request.PhoneNumber);
+
             var profile = await _profileService.UpdateMyProfileAsync(userId, request);
             if (profile == null)
                 return NotFound(new { isSuccess = false, message = "The account profile could not be found." });
