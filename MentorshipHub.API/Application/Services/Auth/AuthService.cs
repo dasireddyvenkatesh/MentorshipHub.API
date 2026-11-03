@@ -801,7 +801,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new ResponseDTO { IsSuccess = true, Message = "Authenticator disabled successfully." };
         }
 
-        public async Task<LoginResponse> VerifyRegisterEmailOtp(VerifyEmailOtpRequest request)
+        public async Task<LoginResponse> VerifyRegisterEmailOtp(VerifyRegisterEmailOtpRequest request)
         {
             if (request == null)
                 return new LoginResponse { IsSuccess = false, Message = "Registration verification details are required." };
