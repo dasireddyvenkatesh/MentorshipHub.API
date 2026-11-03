@@ -1,4 +1,3 @@
-﻿using Azure.Core;
 using MentorshipHub.API.Application.Interfaces.Email;
 using System.Text;
 using System.Text.Encodings.Web;
