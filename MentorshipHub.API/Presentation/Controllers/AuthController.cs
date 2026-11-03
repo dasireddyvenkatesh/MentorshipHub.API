@@ -256,7 +256,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("verify-register-email-otp")]
         [EnableRateLimiting("otp-ip")]
-        public async Task<IActionResult> VerifyRegisterEmailOtp([FromBody] VerifyEmailOtpRequest request)
+        public async Task<IActionResult> VerifyRegisterEmailOtp([FromBody] VerifyRegisterEmailOtpRequest request)
         {
             var response = await _authService.VerifyRegisterEmailOtp(request);
 
