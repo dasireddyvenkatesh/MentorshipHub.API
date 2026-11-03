@@ -42,9 +42,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     // Azure App Service forwards the original client IP through its private
     // platform networks. Trust only these documented private ranges, never
     // arbitrary X-Forwarded-For senders.
-    options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("::ffff:10.0.0.0"), 104));
-    options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("::ffff:192.168.0.0"), 112));
-    options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("::ffff:172.16.0.0"), 108));
+    options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.0.0.0/8"));
+    options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("192.168.0.0/16"));
+    options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("172.16.0.0/12"));
 });
 
 // ASP.NET Core Data Protection remains enabled for OAuth authentication cookies.
