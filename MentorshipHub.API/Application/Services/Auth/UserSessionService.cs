@@ -10,7 +10,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
     {
         private static readonly TimeSpan RefreshWindow = TimeSpan.FromDays(7);
         private static readonly TimeSpan MaximumSessionAge = TimeSpan.FromDays(30);
-        private const int MaxActiveSessions = 2;
+        private const int MaxActiveSessions = 1;
         private readonly AppDbContext _db;
         private readonly IJwtTokenService _jwt;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -65,6 +65,53 @@ namespace MentorshipHub.API.Application.Classes.Auth
             session.LastActivityAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+        }
+
+        public Task<List<UserSession>> GetActiveSessionsAsync(Guid userId)
+        {
+            var now = DateTime.UtcNow;
+            return _db.UserSessions.AsNoTracking()
+                .Where(x => x.UserId == userId &&
+                            !x.IsRevoked &&
+                            x.RevokedAt == null &&
+                            x.ExpiresAt > now)
+                .OrderByDescending(x => x.LastActivityAt ?? x.CreatedAt)
+                .ThenByDescending(x => x.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<bool> RevokeSessionAsync(Guid userId, Guid sessionId)
+        {
+            var session = await _db.UserSessions.FirstOrDefaultAsync(x =>
+                x.Id == sessionId &&
+                x.UserId == userId &&
+                !x.IsRevoked &&
+                x.RevokedAt == null);
+
+            if (session == null)
+                return false;
+
+            var now = DateTime.UtcNow;
+            session.IsRevoked = true;
+            session.RevokedAt = now;
+            session.LastActivityAt = now;
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        public Task<int> RevokeOtherSessionsAsync(Guid userId, Guid currentSessionId)
+        {
+            var now = DateTime.UtcNow;
+            return _db.UserSessions
+                .Where(x => x.UserId == userId &&
+                            x.Id != currentSessionId &&
+                            !x.IsRevoked &&
+                            x.RevokedAt == null &&
+                            x.ExpiresAt > now)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.IsRevoked, true)
+                    .SetProperty(x => x.RevokedAt, now)
+                    .SetProperty(x => x.LastActivityAt, now));
         }
 
         public async Task<Guid> HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken)

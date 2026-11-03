@@ -62,6 +62,9 @@ namespace MentorshipHub.API.Presentation.Controllers
         private Guid? CurrentUserId()
             => Guid.TryParse(User.FindFirst("uid")?.Value, out var userId) ? userId : null;
 
+        private Guid? CurrentSessionId()
+            => Guid.TryParse(User.FindFirst("sid")?.Value, out var sessionId) ? sessionId : null;
+
         private void ClearRefreshTokenCookie()
             => Response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions
             {
@@ -305,6 +308,102 @@ namespace MentorshipHub.API.Presentation.Controllers
                 response.RefreshToken = string.Empty;
             }
             return Ok(response);
+        }
+
+        [HttpGet("sessions")]
+        [Authorize]
+        public async Task<IActionResult> GetActiveSessions()
+        {
+            var userId = CurrentUserId();
+            var currentSessionId = CurrentSessionId();
+            if (!userId.HasValue || !currentSessionId.HasValue)
+                return Unauthorized();
+
+            var sessions = await _userSessionService.GetActiveSessionsAsync(userId.Value);
+            return Ok(new ActiveSessionsResponse
+            {
+                IsSuccess = true,
+                Message = "Active sessions retrieved.",
+                Sessions = sessions.Select(x => new ActiveSessionDto
+                {
+                    SessionId = x.Id,
+                    DeviceName = string.IsNullOrWhiteSpace(x.DeviceName) ? "Unknown device" : x.DeviceName,
+                    IpAddress = x.IpAddress ?? string.Empty,
+                    CreatedAt = x.CreatedAt,
+                    LastActivityAt = x.LastActivityAt,
+                    ExpiresAt = x.ExpiresAt,
+                    IsCurrentSession = x.Id == currentSessionId.Value
+                }).ToList()
+            });
+        }
+
+        [HttpPost("sessions/{sessionId:guid}/revoke")]
+        [Authorize]
+        public async Task<IActionResult> RevokeSession(Guid sessionId)
+        {
+            var userId = CurrentUserId();
+            var currentSessionId = CurrentSessionId();
+            if (!userId.HasValue || !currentSessionId.HasValue)
+                return Unauthorized();
+
+            var revoked = await _userSessionService.RevokeSessionAsync(userId.Value, sessionId);
+            if (!revoked)
+                return NotFound(new SessionActionResponse
+                {
+                    IsSuccess = false,
+                    Message = "The session was not found or is already revoked."
+                });
+
+            var isCurrentSession = sessionId == currentSessionId.Value;
+            if (isCurrentSession)
+            {
+                ClearRefreshTokenCookie();
+                ClearMfaChallengeCookie();
+            }
+
+            return Ok(new SessionActionResponse
+            {
+                IsSuccess = true,
+                Message = isCurrentSession
+                    ? "This session has been revoked."
+                    : "The selected session has been revoked.",
+                AffectedSessions = 1,
+                IsCurrentSession = isCurrentSession
+            });
+        }
+
+        [HttpPost("sessions/revoke-others")]
+        [Authorize]
+        public async Task<IActionResult> RevokeOtherSessions()
+        {
+            var userId = CurrentUserId();
+            var currentSessionId = CurrentSessionId();
+            if (!userId.HasValue || !currentSessionId.HasValue)
+                return Unauthorized();
+
+            var revokedCount = await _userSessionService.RevokeOtherSessionsAsync(userId.Value, currentSessionId.Value);
+            return Ok(new SessionActionResponse
+            {
+                IsSuccess = true,
+                Message = revokedCount == 0
+                    ? "There are no other active sessions."
+                    : $"{revokedCount} other session(s) have been signed out.",
+                AffectedSessions = revokedCount,
+                IsCurrentSession = false
+            });
+        }
+
+        [HttpPost("change-password")]
+        [Authorize]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            var userId = CurrentUserId();
+            var currentSessionId = CurrentSessionId();
+            if (!userId.HasValue || !currentSessionId.HasValue)
+                return Unauthorized();
+
+            return Ok(await _authService.ChangePasswordAsync(userId.Value, currentSessionId.Value, request));
         }
 
         [HttpGet("totp/status")]

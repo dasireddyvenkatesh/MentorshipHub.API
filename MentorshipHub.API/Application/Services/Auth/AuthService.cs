@@ -142,6 +142,50 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
         }
 
+        public async Task<ResponseDTO> ChangePasswordAsync(Guid userId, Guid currentSessionId, ChangePasswordRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.CurrentPassword))
+                return new ResponseDTO { IsSuccess = false, Message = "Enter your current password." };
+
+            var passwordValidation = ValidateRegistrationPassword(request.NewPassword, request.ConfirmPassword);
+            if (passwordValidation != null)
+                return new ResponseDTO { IsSuccess = false, Message = passwordValidation };
+
+            var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId && x.IsActive);
+            if (user == null)
+                return new ResponseDTO { IsSuccess = false, Message = "The account could not be verified." };
+
+            // External-provider-only accounts must use the account recovery flow to establish
+            // local password sign-in. This endpoint never silently creates a password.
+            if (string.IsNullOrWhiteSpace(user.PasswordHash))
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "Password sign-in is not enabled for this account. Use the password recovery process to establish a password."
+                };
+
+            if (!_hasher.Verify(user.PasswordHash, request.CurrentPassword))
+                return new ResponseDTO { IsSuccess = false, Message = "Your current password is incorrect." };
+
+            if (_hasher.Verify(user.PasswordHash, request.NewPassword!))
+                return new ResponseDTO { IsSuccess = false, Message = "Choose a new password that is different from your current password." };
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            user.PasswordHash = _hasher.Hash(request.NewPassword!);
+
+            // Keep this authenticated device signed in; revoke every other active device.
+            await _sessions.RevokeOtherSessionsAsync(userId, currentSessionId);
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return new ResponseDTO
+            {
+                IsSuccess = true,
+                Message = "Your password has been changed. Other active sessions have been signed out."
+            };
+        }
+
         public async Task<ResponseDTO> ResetPasswordAsync(ResetPasswordRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Token))
