@@ -40,10 +40,10 @@ public sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
             .EmailAddress().WithMessage("Enter a valid email address.")
             .MaximumLength(256);
 
-        // Sign-in validates presence only. Do not require registration password complexity here.
+        // Sign-in validates presence only. Do not impose new length/complexity
+        // restrictions on existing credentials during authentication.
         RuleFor(x => x.Password)
-            .NotEmpty().WithMessage("Password is required.")
-            .MaximumLength(128);
+            .NotEmpty().WithMessage("Password is required.");
 
         RuleFor(x => x.DeviceId).MaximumLength(256);
         RuleFor(x => x.DeviceName).MaximumLength(256);
@@ -151,8 +151,8 @@ public sealed class VerifyMfaChallengeRequestValidator : AbstractValidator<Verif
     public VerifyMfaChallengeRequestValidator()
     {
         RuleFor(x => x.Factor)
-            .Must(value => new[] { "auto", "totp", "recovery" }
-                .Contains(value?.Trim(), StringComparer.OrdinalIgnoreCase))
+            .Must(value => string.IsNullOrWhiteSpace(value) || new[] { "auto", "totp", "recovery" }
+                .Contains(value.Trim(), StringComparer.OrdinalIgnoreCase))
             .WithMessage("Choose a supported verification method.");
 
         RuleFor(x => x.ChallengeToken).MaximumLength(512);
