@@ -212,7 +212,9 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
                 "https://localhost:7161",
                 "https://sandbox.xqare.in",
-                "https://www.sandbox.xqare.in")
+                "https://www.sandbox.xqare.in",
+                "https://xqare.in",
+                "https://www.xqare.in")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
