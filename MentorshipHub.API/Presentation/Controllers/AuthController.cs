@@ -322,8 +322,15 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             if (isLinkIntent)
             {
-                if (!Guid.TryParse(result.Properties.Items.GetValueOrDefault(ExternalLinkUserIdKey), out var linkUserId) ||
-                    !Guid.TryParse(result.Properties.Items.GetValueOrDefault(ExternalLinkSessionIdKey), out var linkSessionId) ||
+                var linkUserIdValue = result.Properties.Items.TryGetValue(ExternalLinkUserIdKey, out var storedUserId)
+                    ? storedUserId
+                    : null;
+                var linkSessionIdValue = result.Properties.Items.TryGetValue(ExternalLinkSessionIdKey, out var storedSessionId)
+                    ? storedSessionId
+                    : null;
+
+                if (!Guid.TryParse(linkUserIdValue, out var linkUserId) ||
+                    !Guid.TryParse(linkSessionIdValue, out var linkSessionId) ||
                     string.IsNullOrWhiteSpace(oauthUser.ProviderId))
                 {
                     return ExternalLinkResult(false, "The account-link request could not be validated. Start again from Settings.");
