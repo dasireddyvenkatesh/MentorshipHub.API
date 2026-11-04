@@ -1137,6 +1137,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(password))
                 return "Password is required.";
 
+            if (password.Length > 128)
+                return "Password cannot exceed 128 characters.";
+
             if (password.Length < 8 ||
                 !password.Any(char.IsUpper) ||
                 !password.Any(char.IsLower) ||
