@@ -292,7 +292,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var passwordValidation = await ValidatePasswordWithLockoutAsync(email, request.Password);
             var user = passwordValidation.User;
             if (!passwordValidation.IsValid || user == null)
-                return new LoginResponse { IsSuccess = false, Message = "Invalid email or password." };
+            {
+                return new LoginResponse
+                {
+                    IsSuccess = false,
+                    Message = "Invalid email or password. If you have not completed registration, choose Create one free to finish email verification."
+                };
+            }
 
             if (!user.IsActive)
                 return new LoginResponse { IsSuccess = false, Message = "Account is inactive." };
