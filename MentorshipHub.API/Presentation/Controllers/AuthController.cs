@@ -337,7 +337,13 @@ namespace MentorshipHub.API.Presentation.Controllers
                 }
 
                 var linkResponse = await _authService.LinkExternalLoginAsync(linkUserId, linkSessionId, oauthUser);
-                return ExternalLinkResult(linkResponse.IsSuccess, linkResponse.Message);
+                var linkMessage = linkResponse.Message;
+
+                // TEMPORARY: show the email returned by Twitter/X in the Settings Snackbar.
+                if (string.Equals(provider, TwitterDefaults.AuthenticationScheme, StringComparison.OrdinalIgnoreCase))
+                    linkMessage += $" [Twitter returned email: {oauthUser.Email ?? "NULL"}]";
+
+                return ExternalLinkResult(linkResponse.IsSuccess, linkMessage);
             }
 
             // A provider ID is required for every sign-in. Email and its verification
