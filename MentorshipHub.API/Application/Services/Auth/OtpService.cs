@@ -164,7 +164,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send email verification OTP to {Email}.", email);
+                _logger.LogError(ex, "Failed to send email verification OTP.");
                 sent = false;
             }
 
