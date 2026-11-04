@@ -716,10 +716,25 @@ namespace MentorshipHub.API.Application.Classes.Auth
             User user;
             if (externalLogin != null)
             {
-                // Stable provider ID identifies the linked login. When the provider
-                // supplies a verified email, also ensure it has not drifted to a
-                // different XQARE account email since the link was established.
+                // For providers whose integrations supply a verified email, require
+                // that evidence on every login. This also blocks old mismatched links
+                // created before the verified-email check was introduced.
                 var returnedEmail = request.Email?.Trim();
+                var requiresVerifiedEmail = new[] { "Google", "GitHub", "LinkedIn" }
+                    .Contains(request.Provider, StringComparer.OrdinalIgnoreCase);
+
+                if (requiresVerifiedEmail &&
+                    (!request.EmailVerified ||
+                     string.IsNullOrWhiteSpace(returnedEmail) ||
+                     !new EmailAddressAttribute().IsValid(returnedEmail)))
+                {
+                    return new LoginResponse
+                    {
+                        IsSuccess = false,
+                        Message = "This provider did not return a verified email address. Sign in using another linked method and review your connected accounts."
+                    };
+                }
+
                 if (!string.IsNullOrWhiteSpace(returnedEmail) &&
                     !string.Equals(
                         externalLogin.User.Email?.Trim(),
@@ -729,7 +744,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     return new LoginResponse
                     {
                         IsSuccess = false,
-                        Message = "The verified email returned by this provider no longer matches the email on the linked XQARE account. Sign in using another linked method and review your connected accounts."
+                        Message = "The email returned by this provider no longer matches the email on the linked XQARE account. Sign in using another linked method and review your connected accounts."
                     };
                 }
 
