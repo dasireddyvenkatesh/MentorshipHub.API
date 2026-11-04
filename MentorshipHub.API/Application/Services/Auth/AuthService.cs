@@ -660,8 +660,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 // supplies a verified email, also ensure it has not drifted to a
                 // different XQARE account email since the link was established.
                 var returnedEmail = request.Email?.Trim();
-                if (request.EmailVerified &&
-                    !string.IsNullOrWhiteSpace(returnedEmail) &&
+                if (!string.IsNullOrWhiteSpace(returnedEmail) &&
                     !string.Equals(
                         externalLogin.User.Email?.Trim(),
                         returnedEmail,
