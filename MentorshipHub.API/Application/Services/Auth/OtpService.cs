@@ -4,6 +4,7 @@ using MentorshipHub.API.Application.Interfaces.Email;
 using MentorshipHub.API.Enities;
 using MentorshipHub.API.Infrastructure.EntityModels.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 
 namespace MentorshipHub.API.Application.Classes.Auth
@@ -14,17 +15,20 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private readonly AppDbContext _db;
         private readonly IEmailService _emailService;
         private readonly IEmailTemplateService _emailTemplateService;
+        private readonly ILogger<OtpService> _logger;
 
         public OtpService(
             IPasswordHasher hasher,
             AppDbContext db,
             IEmailService emailService,
-            IEmailTemplateService emailTemplateService)
+            IEmailTemplateService emailTemplateService,
+            ILogger<OtpService> logger)
         {
             _hasher = hasher;
             _db = db;
             _emailService = emailService;
             _emailTemplateService = emailTemplateService;
+            _logger = logger;
         }
 
         public async Task<EmailOtpResponse> GenerateEmailVerificationOtp(string name, string email, bool isResend = false)
@@ -44,13 +48,28 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (existing?.LockedUntil is DateTime lockedUntil && lockedUntil > now)
             {
                 var minutes = Math.Ceiling((lockedUntil - now).TotalMinutes);
-                return new EmailOtpResponse { IsSuccess = false, Message = $"Too many failed attempts. Try again in {minutes} minutes." };
+                return new EmailOtpResponse
+                {
+                    IsSuccess = false,
+                    CanVerifyExistingOtp = false,
+                    RetryAfterSeconds = GetRetryAfterSeconds(lockedUntil, now),
+                    Message = $"Too many failed attempts. Try again in {minutes} minutes."
+                };
             }
 
             if (existing != null && existing.CreatedAt.AddSeconds(60) > now)
             {
-                var seconds = Math.Ceiling((existing.CreatedAt.AddSeconds(60) - now).TotalSeconds);
-                return new EmailOtpResponse { IsSuccess = false, Message = $"Please wait {seconds} seconds before requesting another code." };
+                var retryAt = existing.CreatedAt.AddSeconds(60);
+                var seconds = GetRetryAfterSeconds(retryAt, now);
+                var canVerify = CanVerifyExistingOtp(existing, now);
+
+                return new EmailOtpResponse
+                {
+                    IsSuccess = false,
+                    CanVerifyExistingOtp = canVerify,
+                    RetryAfterSeconds = seconds,
+                    Message = $"Please wait {seconds} seconds before requesting another code."
+                };
             }
 
             if (existing != null)
@@ -68,10 +87,30 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 }
 
                 if (existing.HourlySendCount >= 5)
-                    return new EmailOtpResponse { IsSuccess = false, Message = "Hourly OTP limit reached. Please try again later." };
+                {
+                    var retryAt = existing.HourlyWindowStartedAt!.Value.AddHours(1);
+                    var seconds = GetRetryAfterSeconds(retryAt, now);
+                    return new EmailOtpResponse
+                    {
+                        IsSuccess = false,
+                        CanVerifyExistingOtp = CanVerifyExistingOtp(existing, now),
+                        RetryAfterSeconds = seconds,
+                        Message = $"Hourly OTP limit reached. Please try again in {Math.Ceiling(seconds / 60d)} minutes."
+                    };
+                }
 
                 if (existing.DailySendCount >= 10)
-                    return new EmailOtpResponse { IsSuccess = false, Message = "Daily OTP limit reached. Try again tomorrow." };
+                {
+                    var retryAt = existing.DailyWindowStartedAt!.Value.AddHours(24);
+                    var seconds = GetRetryAfterSeconds(retryAt, now);
+                    return new EmailOtpResponse
+                    {
+                        IsSuccess = false,
+                        CanVerifyExistingOtp = CanVerifyExistingOtp(existing, now),
+                        RetryAfterSeconds = seconds,
+                        Message = $"Daily OTP limit reached. Please try again in {Math.Ceiling(seconds / 3600d)} hours."
+                    };
+                }
 
                 existing.HourlySendCount++;
                 existing.DailySendCount++;
@@ -118,15 +157,52 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 ? _emailTemplateService.BuildResendOtp(name, code)
                 : _emailTemplateService.BuildRegistrationOtp(name, code);
 
-            var sent = await _emailService.SendEmail(email, template.subject, template.body);
-            if (!sent)
+            bool sent;
+            try
             {
-                return new EmailOtpResponse { IsSuccess = false, Message = "We couldn't send the verification email. Please try again later." };
+                sent = await _emailService.SendEmail(email, template.subject, template.body);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send email verification OTP to {Email}.", email);
+                sent = false;
             }
 
-            return new EmailOtpResponse { IsSuccess = true, Message = "Verification code sent to your email." };
+            if (!sent)
+            {
+                // The OTP was persisted before contacting the provider so the send quota
+                // cannot be bypassed. Invalidate only this exact code, not a newer resend
+                // that may have been created concurrently.
+                await _db.EmailVerificationOtps
+                    .Where(x => x.Email == email && x.CodeHash == hash && !x.IsUsed)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IsUsed, true));
+
+                return new EmailOtpResponse
+                {
+                    IsSuccess = false,
+                    CanVerifyExistingOtp = false,
+                    RetryAfterSeconds = 60,
+                    Message = "We couldn't send the verification email. Please try again in 60 seconds."
+                };
+            }
+
+            return new EmailOtpResponse
+            {
+                IsSuccess = true,
+                CanVerifyExistingOtp = true,
+                RetryAfterSeconds = 60,
+                Message = "Verification code sent to your email."
+            };
         }
 
+        private static bool CanVerifyExistingOtp(EmailVerificationOtp? otp, DateTime now)
+            => otp != null &&
+               !otp.IsUsed &&
+               otp.ExpiresAt > now &&
+               (!otp.LockedUntil.HasValue || otp.LockedUntil.Value <= now);
+
+        private static int GetRetryAfterSeconds(DateTime retryAt, DateTime now)
+            => Math.Max(1, (int)Math.Ceiling((retryAt - now).TotalSeconds));
 
     }
 }
