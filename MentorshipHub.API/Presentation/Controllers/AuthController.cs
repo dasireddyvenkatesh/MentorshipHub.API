@@ -384,7 +384,6 @@ namespace MentorshipHub.API.Presentation.Controllers
                 return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
                 {
                     ["mfa"] = "required",
-                    ["email"] = response.Email ?? oauthUser.Email,
                     ["message"] = response.Message ?? "Enter your verification code to finish signing in."
                 }));
             }
