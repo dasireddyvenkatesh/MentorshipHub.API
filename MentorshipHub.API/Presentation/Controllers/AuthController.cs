@@ -558,6 +558,29 @@ namespace MentorshipHub.API.Presentation.Controllers
             return response.IsSuccess ? Ok(response) : NotFound(response);
         }
 
+        [HttpPost("external-links/{provider}/disconnect")]
+        [Authorize]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> DisconnectExternalLogin(
+            string provider,
+            [FromBody] DisconnectExternalLoginRequest request)
+        {
+            if (!HasTrustedBrowserOrigin())
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { isSuccess = false, message = "Untrusted request origin." });
+
+            var userId = CurrentUserId();
+            var currentSessionId = CurrentSessionId();
+            if (!userId.HasValue || !currentSessionId.HasValue)
+                return Unauthorized();
+
+            return Ok(await _authService.DisconnectExternalLoginAsync(
+                userId.Value,
+                currentSessionId.Value,
+                provider,
+                request?.CurrentPassword ?? string.Empty));
+        }
+
         [HttpPost("change-password")]
         [Authorize]
         [EnableRateLimiting("otp-ip")]
