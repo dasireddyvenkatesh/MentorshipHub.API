@@ -7,8 +7,5 @@
 
         public string DeviceId { get; set; }
         public string DeviceName { get; set; }
-        // Required only by the registration verification endpoint.
-        public string? Password { get; set; }
-        public string? ConfirmPassword { get; set; }
     }
 }
