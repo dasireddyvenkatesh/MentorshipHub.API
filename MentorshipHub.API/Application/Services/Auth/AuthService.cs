@@ -1167,16 +1167,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
                 return "Enter a valid email address.";
 
-            var password = request.Password ?? string.Empty;
-            if (password.Length < 8 ||
-                !password.Any(char.IsUpper) ||
-                !password.Any(char.IsLower) ||
-                !password.Any(char.IsDigit) ||
-                !password.Any(c => !char.IsLetterOrDigit(c)))
-            {
-                return "Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.";
-            }
-
             return null;
         }
 
