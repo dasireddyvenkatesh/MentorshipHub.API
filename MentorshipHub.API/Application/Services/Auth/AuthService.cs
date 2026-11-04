@@ -476,7 +476,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 IsSuccess = response.IsSuccess,
                 Email = user.Email,
                 Message = response.Message,
-                RequiresEmailVerification = true
+                RequiresEmailVerification = response.CanVerifyExistingOtp,
+                CanVerifyExistingOtp = response.CanVerifyExistingOtp,
+                RetryAfterSeconds = response.RetryAfterSeconds
             };
         }
 
@@ -1072,7 +1074,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 IsSuccess = otpResponse.IsSuccess,
                 Email = existingUser.Email,
                 Message = otpResponse.Message,
-                RequiresEmailVerification = true
+                RequiresEmailVerification = otpResponse.CanVerifyExistingOtp,
+                CanVerifyExistingOtp = otpResponse.CanVerifyExistingOtp,
+                RetryAfterSeconds = otpResponse.RetryAfterSeconds
             };
         }
 
