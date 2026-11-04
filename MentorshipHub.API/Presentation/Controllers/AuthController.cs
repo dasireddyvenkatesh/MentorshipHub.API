@@ -31,18 +31,21 @@ namespace MentorshipHub.API.Presentation.Controllers
         private readonly IOAuthUserMapper _oauthUserMapper;
         private readonly IWebHostEnvironment _env;
         private readonly IDataProtector _externalLinkTicketProtector;
+        private readonly IConfiguration _configuration;
 
         public AuthController(
             IAuthService authService,
             IUserSessionService userSessionService,
             IOAuthUserMapper oauthUserMapper,
             IWebHostEnvironment env,
-            IDataProtectionProvider dataProtectionProvider)
+            IDataProtectionProvider dataProtectionProvider,
+            IConfiguration configuration)
         {
             _authService = authService;
             _userSessionService = userSessionService;
             _oauthUserMapper = oauthUserMapper;
             _env = env;
+            _configuration = configuration;
             _externalLinkTicketProtector = dataProtectionProvider.CreateProtector("XQARE.ExternalLoginLink.v1");
         }
 
@@ -84,13 +87,31 @@ namespace MentorshipHub.API.Presentation.Controllers
                 Path = "/api/auth"
             });
 
-        private string FrontendLoginUrl() => _env.IsDevelopment()
-            ? "https://localhost:7161/login"
-            : "https://sandbox.xqare.in/login";
+        private string FrontendBaseUrl()
+        {
+            var configuredUrl = _configuration["Frontend:BaseUrl"];
+            if (!Uri.TryCreate(configuredUrl, UriKind.Absolute, out var frontendUri) ||
+                frontendUri.AbsolutePath != "/" ||
+                !string.IsNullOrEmpty(frontendUri.Query) ||
+                !string.IsNullOrEmpty(frontendUri.Fragment))
+            {
+                throw new InvalidOperationException(
+                    "Frontend:BaseUrl must be configured as an absolute frontend origin.");
+            }
 
-        private string FrontendSettingsUrl() => _env.IsDevelopment()
-            ? "https://localhost:7161/settings"
-            : "https://sandbox.xqare.in/settings";
+            if (!string.Equals(frontendUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+                !(_env.IsDevelopment() && frontendUri.IsLoopback))
+            {
+                throw new InvalidOperationException(
+                    "Frontend:BaseUrl must use HTTPS outside local development.");
+            }
+
+            return frontendUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+        }
+
+        private string FrontendLoginUrl() => $"{FrontendBaseUrl()}/login";
+
+        private string FrontendSettingsUrl() => $"{FrontendBaseUrl()}/settings";
 
         private static CookieOptions ExternalLinkTicketCookieOptions() => new()
         {
@@ -429,28 +450,6 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(response);
         }
 
-        [HttpPost("verify-email-otp")]
-        [EnableRateLimiting("otp-ip")]
-        public async Task<IActionResult> VerifyEmailOtp([FromBody] VerifyEmailOtpRequest request)
-        {
-            var response = await _authService.VerifyEmailOtp(request);
-
-            if (response.IsSuccess && !string.IsNullOrWhiteSpace(response.MfaChallengeToken))
-            {
-                SetMfaChallengeCookie(response.MfaChallengeToken);
-                response.MfaChallengeToken = null;
-            }
-
-            if (response.IsSuccess && !string.IsNullOrEmpty(response.RefreshToken))
-            {
-                SetRefreshTokenCookie(response.RefreshToken);
-                // The refresh token is cookie-only; never expose it in the JSON body.
-                response.RefreshToken = string.Empty;
-            }
-
-            return Ok(response);
-        }
-
         private async Task<IActionResult> CompleteMfaVerificationAsync(VerifyMfaChallengeRequest request, string token)
         {
             var response = await _authService.VerifyMfaChallengeAsync(request, token);
@@ -652,7 +651,6 @@ namespace MentorshipHub.API.Presentation.Controllers
             var refreshToken = Request.Cookies[RefreshTokenCookieName];
             if (string.IsNullOrWhiteSpace(refreshToken))
             {
-                ClearRefreshTokenCookie();
                 return Unauthorized(new { isSuccess = false, message = "Refresh token missing. Please sign in again." });
             }
 
@@ -663,7 +661,10 @@ namespace MentorshipHub.API.Presentation.Controllers
                 return Ok(result.response);
             }
 
-            ClearRefreshTokenCookie();
+            // Do not expire the browser cookie on a failed rotation. Another tab may
+            // already have rotated the shared cookie successfully; a late 401 response
+            // must not delete that newer cookie. Invalid cookies are overwritten on the
+            // next successful sign-in or removed by explicit logout.
             return Unauthorized(result.response);
         }
 
