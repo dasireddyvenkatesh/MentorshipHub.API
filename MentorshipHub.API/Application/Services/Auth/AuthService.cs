@@ -557,6 +557,30 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (user == null)
                 return new ResponseDTO { IsSuccess = false, Message = "The XQARE account could not be verified." };
 
+            // A provider link must represent the same verified email identity as the
+            // authenticated XQARE account. Authentication to two unrelated identities
+            // must never implicitly combine them under one XQARE user.
+            var providerEmail = request.Email?.Trim();
+            if (!request.EmailVerified ||
+                string.IsNullOrWhiteSpace(providerEmail) ||
+                !new EmailAddressAttribute().IsValid(providerEmail))
+            {
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "This provider did not supply a verified email address. XQARE can only connect providers that return a verified matching email."
+                };
+            }
+
+            if (!string.Equals(user.Email?.Trim(), providerEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "The verified email on this provider account does not match your XQARE account email. Sign in to the XQARE account with that email before connecting this provider."
+                };
+            }
+
             var identityOwner = await _db.ExternalLogins.FirstOrDefaultAsync(x =>
                 x.Provider == provider && x.ProviderUserId == providerId);
 
@@ -632,6 +656,24 @@ namespace MentorshipHub.API.Application.Classes.Auth
             User user;
             if (externalLogin != null)
             {
+                // Stable provider ID identifies the linked login. When the provider
+                // supplies a verified email, also ensure it has not drifted to a
+                // different XQARE account email since the link was established.
+                var returnedEmail = request.Email?.Trim();
+                if (request.EmailVerified &&
+                    !string.IsNullOrWhiteSpace(returnedEmail) &&
+                    !string.Equals(
+                        externalLogin.User.Email?.Trim(),
+                        returnedEmail,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return new LoginResponse
+                    {
+                        IsSuccess = false,
+                        Message = "The verified email returned by this provider no longer matches the email on the linked XQARE account. Sign in using another linked method and review your connected accounts."
+                    };
+                }
+
                 user = externalLogin.User;
             }
             else
