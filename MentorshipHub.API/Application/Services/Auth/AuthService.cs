@@ -482,7 +482,132 @@ namespace MentorshipHub.API.Application.Classes.Auth
             };
         }
 
-                public async Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request)
+                public async Task<ConnectedAccountsResponse> GetConnectedAccountsAsync(Guid userId)
+        {
+            var account = await _db.Users.AsNoTracking()
+                .Where(x => x.Id == userId && x.IsActive && x.IsEmailConfirmed)
+                .Select(x => new { x.Email, HasPassword = !string.IsNullOrWhiteSpace(x.PasswordHash) })
+                .FirstOrDefaultAsync();
+
+            if (account == null)
+            {
+                return new ConnectedAccountsResponse
+                {
+                    IsSuccess = false,
+                    Message = "The account could not be verified."
+                };
+            }
+
+            var providers = await _db.ExternalLogins.AsNoTracking()
+                .Where(x => x.UserId == userId)
+                .OrderBy(x => x.Provider)
+                .Select(x => x.Provider)
+                .Distinct()
+                .ToListAsync();
+
+            return new ConnectedAccountsResponse
+            {
+                IsSuccess = true,
+                Email = account.Email,
+                HasPassword = account.HasPassword,
+                ConnectedProviders = providers,
+                Message = "Connected sign-in methods retrieved."
+            };
+        }
+
+        public async Task<ResponseDTO> LinkExternalLoginAsync(Guid userId, Guid sessionId, ExternalLoginRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.Provider) ||
+                string.IsNullOrWhiteSpace(request.ProviderId))
+            {
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "The external provider did not return a valid account identifier."
+                };
+            }
+
+            var provider = request.Provider.Trim();
+            var supportedProviders = new[] { "Google", "GitHub", "LinkedIn", "Twitter" };
+            provider = supportedProviders.FirstOrDefault(
+                x => string.Equals(x, provider, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+
+            if (string.IsNullOrEmpty(provider))
+                return new ResponseDTO { IsSuccess = false, Message = "This sign-in provider is not supported." };
+
+            var providerId = request.ProviderId.Trim();
+            if (providerId.Length > 256)
+                return new ResponseDTO { IsSuccess = false, Message = "The provider account identifier is invalid." };
+
+            var now = DateTime.UtcNow;
+            var activeSession = await _db.UserSessions.AsNoTracking().AnyAsync(x =>
+                x.Id == sessionId &&
+                x.UserId == userId &&
+                !x.IsRevoked &&
+                x.RevokedAt == null &&
+                x.ExpiresAt > now);
+
+            if (!activeSession)
+                return new ResponseDTO { IsSuccess = false, Message = "Your XQARE session is no longer active. Sign in again before connecting an account." };
+
+            var user = await _db.Users.FirstOrDefaultAsync(x =>
+                x.Id == userId && x.IsActive && x.IsEmailConfirmed);
+
+            if (user == null)
+                return new ResponseDTO { IsSuccess = false, Message = "The XQARE account could not be verified." };
+
+            var identityOwner = await _db.ExternalLogins.FirstOrDefaultAsync(x =>
+                x.Provider == provider && x.ProviderUserId == providerId);
+
+            if (identityOwner != null)
+            {
+                return identityOwner.UserId == userId
+                    ? new ResponseDTO { IsSuccess = true, Message = $"{provider} is already connected to this account." }
+                    : new ResponseDTO { IsSuccess = false, Message = "This provider account is already connected to another XQARE account." };
+            }
+
+            var existingProvider = await _db.ExternalLogins.AnyAsync(x =>
+                x.UserId == userId && x.Provider == provider);
+
+            if (existingProvider)
+                return new ResponseDTO { IsSuccess = false, Message = $"A different {provider} account is already connected. Disconnect it before connecting another one." };
+
+            _db.ExternalLogins.Add(new ExternalLogin
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Provider = provider,
+                ProviderUserId = providerId,
+                CreatedAt = now
+            });
+
+            try
+            {
+                await _db.SaveChangesAsync();
+                return new ResponseDTO { IsSuccess = true, Message = $"{provider} has been connected successfully." };
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                _db.ChangeTracker.Clear();
+
+                var racedIdentity = await _db.ExternalLogins.AsNoTracking().FirstOrDefaultAsync(x =>
+                    x.Provider == provider && x.ProviderUserId == providerId);
+
+                if (racedIdentity?.UserId == userId)
+                    return new ResponseDTO { IsSuccess = true, Message = $"{provider} is already connected to this account." };
+
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = racedIdentity != null
+                        ? "This provider account is already connected to another XQARE account."
+                        : $"A {provider} account is already connected to this XQARE account."
+                };
+            }
+        }
+
+        public async Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request)
         {
             if (request == null ||
                 string.IsNullOrWhiteSpace(request.Provider) ||
