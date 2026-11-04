@@ -20,6 +20,13 @@ namespace MentorshipHub.API.Application.Services.Auth
 
             var emailVerified = bool.TryParse(user.FindFirst("email_verified")?.Value, out var isVerified) && isVerified;
 
+            // The Microsoft Twitter OAuth 1.0a handler retrieves user details using
+            // account/verify_credentials.json?include_email=true. X returns a null email
+            // when the account email is absent or unverified, so a non-empty email from
+            // this specific handler is the verification signal for Twitter.
+            if (string.Equals(provider, "Twitter", StringComparison.OrdinalIgnoreCase))
+                emailVerified = !string.IsNullOrWhiteSpace(email);
+
             var providerId =
                 user.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
                 user.FindFirst("sub")?.Value ??
