@@ -116,16 +116,22 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             try
             {
-                var resetPageUrl = _configuration["Frontend:PasswordResetUrl"];
-                if (!Uri.TryCreate(resetPageUrl, UriKind.Absolute, out var resetUri) ||
-                    resetUri.Scheme != Uri.UriSchemeHttps &&
-                    !_configuration.GetValue<bool>("Frontend:AllowInsecurePasswordResetUrl"))
+                // All authentication redirects and reset links share one configured
+                // frontend origin so sandbox and production cannot cross-link.
+                var frontendBaseUrl = _configuration["Frontend:BaseUrl"];
+                if (!Uri.TryCreate(frontendBaseUrl, UriKind.Absolute, out var frontendUri) ||
+                    !string.Equals(frontendUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+                    frontendUri.AbsolutePath != "/" ||
+                    !string.IsNullOrEmpty(frontendUri.Query) ||
+                    !string.IsNullOrEmpty(frontendUri.Fragment))
                 {
-                    // Never construct a reset link from an untrusted Host header.
+                    // Never construct a reset link from an untrusted Host header or
+                    // an unvalidated environment URL.
                     await InvalidatePasswordResetTokenAsync(resetToken!.Id);
                     return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
                 }
 
+                var resetUri = new Uri(frontendUri, "/reset-password");
                 var resetUrl = QueryHelpers.AddQueryString(resetUri.ToString(), "token", rawToken!);
                 var template = _emailTemplateService.BuildPasswordReset(user!.Username, resetUrl);
                 var sent = await _emailService.SendEmail(user.Email, template.subject, template.body);
