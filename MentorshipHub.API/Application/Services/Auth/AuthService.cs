@@ -1168,80 +1168,104 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<LoginResponse> VerifyEmailOtp(VerifyEmailOtpRequest request)
         {
-            var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.OtpCode))
+            var email = request?.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+            var code = request?.OtpCode?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(code))
                 return new LoginResponse { IsSuccess = false, Message = "Email and verification code are required." };
 
+            // Serialize OTP verification with registration verification and resends.
+            // A successful OTP is consumed once, even when two requests arrive together.
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({email}))");
+
             var now = DateTime.UtcNow;
-            var otp = await _db.EmailVerificationOtps.FirstOrDefaultAsync(x => x.Email == email);
+            var otp = await _db.EmailVerificationOtps
+                .FirstOrDefaultAsync(x => x.Email == email);
 
             if (otp == null)
-                return new LoginResponse { IsSuccess = false, Message = "OTP not found." };
+            {
+                await transaction.RollbackAsync();
+                return new LoginResponse { IsSuccess = false, Message = "OTP not found. Request a new verification code." };
+            }
 
             if (otp.IsUsed)
-                return new LoginResponse { IsSuccess = false, Message = "This OTP has already been used. Request a new verification code." };
-
-            if (otp.LockedUntil.HasValue)
             {
-                if (otp.LockedUntil.Value > now)
-                {
-                    var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - now).TotalMinutes);
-                    return new LoginResponse { IsSuccess = false, Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
-                }
+                await transaction.RollbackAsync();
+                return new LoginResponse { IsSuccess = false, Message = "This OTP has already been used. Request a new verification code." };
+            }
 
+            if (otp.LockedUntil.HasValue && otp.LockedUntil.Value > now)
+            {
+                var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - now).TotalMinutes);
+                await transaction.RollbackAsync();
+                return new LoginResponse { IsSuccess = false, Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
+            }
+
+            if (otp.LockedUntil.HasValue && otp.LockedUntil.Value <= now)
+            {
                 otp.AttemptCount = 0;
                 otp.LockedUntil = null;
             }
 
             if (otp.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
                 return new LoginResponse { IsSuccess = false, Message = "OTP expired. Request a new verification code." };
+            }
 
-            if (!_hasher.Verify(otp.CodeHash, request.OtpCode))
+            if (!_hasher.Verify(otp.CodeHash, code))
             {
                 otp.AttemptCount++;
                 var remainingAttempts = Math.Max(0, otp.MaxAttempts - otp.AttemptCount);
-
                 if (otp.AttemptCount >= otp.MaxAttempts)
                 {
                     otp.LockedUntil = now.AddHours(24);
                     await _db.SaveChangesAsync();
-                    return new LoginResponse { IsSuccess = false, Message = "Too many incorrect attempts. Try again in 24 hours." };
+                    await transaction.CommitAsync();
+                    return new LoginResponse
+                    {
+                        IsSuccess = false,
+                        RetryAfterSeconds = 24 * 60 * 60,
+                        Message = "Too many incorrect attempts. Try again in 24 hours."
+                    };
                 }
 
                 await _db.SaveChangesAsync();
-                return new LoginResponse { IsSuccess = false, Message = $"Invalid OTP. {remainingAttempts} attempt(s) remaining." };
+                await transaction.CommitAsync();
+                return new LoginResponse
+                {
+                    IsSuccess = false,
+                    Message = $"Invalid OTP. {remainingAttempts} attempt(s) remaining."
+                };
             }
 
             var user = await _db.Users
                 .Include(x => x.SecuritySetting)
-                .FirstOrDefaultAsync(x => x.Email == email);
+                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
-            if (user == null)
-                return new LoginResponse { IsSuccess = false, Message = "User not found." };
-
-            if (!user.IsActive)
-                return new LoginResponse { IsSuccess = false, Message = "Account is inactive." };
-
-            if (!user.IsEmailConfirmed)
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed)
             {
+                await transaction.RollbackAsync();
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = "This account is still awaiting registration. Complete verification from the Register page to set your password."
+                    Message = "This account cannot use email sign-in. Complete registration or contact support."
                 };
             }
 
             otp.IsUsed = true;
-            user.IsEmailConfirmed = true;
             await _db.SaveChangesAsync();
 
             if (user.SecuritySetting?.MfaEnabled == true)
             {
-                return await CreateMfaChallengeAsync(user, new LoginRequest
+                var challenge = await CreateMfaChallengeAsync(user, new LoginRequest
                 {
                     DeviceId = request.DeviceId ?? string.Empty,
                     DeviceName = request.DeviceName
                 });
+                await transaction.CommitAsync();
+                return challenge;
             }
 
             var loginRequest = new LoginRequest
@@ -1249,8 +1273,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 DeviceId = request.DeviceId ?? string.Empty,
                 DeviceName = request.DeviceName
             };
-
-            return await CreateSession(user, loginRequest);
+            var response = await CreateSession(user, loginRequest);
+            await transaction.CommitAsync();
+            return response;
         }
 
         public async Task<(RefreshTokenResponse response, string refreshToken)> RefreshAsync(string refreshToken)
