@@ -19,15 +19,6 @@ public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest
             .EmailAddress().WithMessage("Enter a valid email address.")
             .MaximumLength(256);
 
-        RuleFor(x => x.Password)
-            .NotEmpty().WithMessage("Password is required.")
-            .MinimumLength(8).WithMessage("Password must be at least 8 characters.")
-            .MaximumLength(128).WithMessage("Password cannot exceed 128 characters.")
-            .Matches("[A-Z]").WithMessage("Include at least one uppercase letter.")
-            .Matches("[a-z]").WithMessage("Include at least one lowercase letter.")
-            .Matches("[0-9]").WithMessage("Include at least one number.")
-            .Matches(@"[\W_]").WithMessage("Include at least one symbol.");
-
         RuleFor(x => x.DeviceId).MaximumLength(256);
         RuleFor(x => x.DeviceName).MaximumLength(256);
     }
