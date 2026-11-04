@@ -893,24 +893,32 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<EmailOtpResponse> ResendEmailOtp(EmailOtpRequest request)
         {
             var email = request?.Email?.Trim().ToLowerInvariant() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(email))
-                return new EmailOtpResponse { IsSuccess = false, Message = "Enter a valid email address." };
+            if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
+            {
+                return new EmailOtpResponse
+                {
+                    IsSuccess = true,
+                    Message = "If this address has a pending registration, a verification code can be sent."
+                };
+            }
 
-            var user = await _db.Users.FirstOrDefaultAsync(x => x.Email.ToLower() == email);
+            // Registration OTPs are not a passwordless sign-in method. Only active,
+            // unconfirmed registrations can request another registration code.
+            var user = await _db.Users.FirstOrDefaultAsync(x =>
+                x.Email.ToLower() == email &&
+                x.IsActive &&
+                !x.IsEmailConfirmed);
 
             if (user == null)
             {
                 return new EmailOtpResponse
                 {
                     IsSuccess = true,
-                    Message = "If the account exists, a verification code has been sent."
+                    Message = "If this address has a pending registration, a verification code can be sent."
                 };
             }
 
-            var response = await _otp.GenerateEmailVerificationOtp(user.Username, user.Email, true);
-
-            return response;
-
+            return await _otp.GenerateEmailVerificationOtp(user.Username, user.Email, true);
         }
 
         private async Task<LoginResponse> CreateMfaChallengeAsync(User user, LoginRequest loginRequest)
@@ -1166,118 +1174,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return sessionResponse;
         }
 
-        public async Task<LoginResponse> VerifyEmailOtp(VerifyEmailOtpRequest request)
-        {
-            var email = request?.Email?.Trim().ToLowerInvariant() ?? string.Empty;
-            var code = request?.OtpCode?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(code))
-                return new LoginResponse { IsSuccess = false, Message = "Email and verification code are required." };
-
-            // Serialize OTP verification with registration verification and resends.
-            // A successful OTP is consumed once, even when two requests arrive together.
-            await using var transaction = await _db.Database.BeginTransactionAsync();
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({email}))");
-
-            var now = DateTime.UtcNow;
-            var otp = await _db.EmailVerificationOtps
-                .FirstOrDefaultAsync(x => x.Email == email);
-
-            if (otp == null)
-            {
-                await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "OTP not found. Request a new verification code." };
-            }
-
-            if (otp.IsUsed)
-            {
-                await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "This OTP has already been used. Request a new verification code." };
-            }
-
-            if (otp.LockedUntil.HasValue && otp.LockedUntil.Value > now)
-            {
-                var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - now).TotalMinutes);
-                await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
-            }
-
-            if (otp.LockedUntil.HasValue && otp.LockedUntil.Value <= now)
-            {
-                otp.AttemptCount = 0;
-                otp.LockedUntil = null;
-            }
-
-            if (otp.ExpiresAt <= now)
-            {
-                await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "OTP expired. Request a new verification code." };
-            }
-
-            if (!_hasher.Verify(otp.CodeHash, code))
-            {
-                otp.AttemptCount++;
-                var remainingAttempts = Math.Max(0, otp.MaxAttempts - otp.AttemptCount);
-                if (otp.AttemptCount >= otp.MaxAttempts)
-                {
-                    otp.LockedUntil = now.AddHours(24);
-                    await _db.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    return new LoginResponse
-                    {
-                        IsSuccess = false,
-                        RetryAfterSeconds = 24 * 60 * 60,
-                        Message = "Too many incorrect attempts. Try again in 24 hours."
-                    };
-                }
-
-                await _db.SaveChangesAsync();
-                await transaction.CommitAsync();
-                return new LoginResponse
-                {
-                    IsSuccess = false,
-                    Message = $"Invalid OTP. {remainingAttempts} attempt(s) remaining."
-                };
-            }
-
-            var user = await _db.Users
-                .Include(x => x.SecuritySetting)
-                .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
-
-            if (user == null || !user.IsActive || !user.IsEmailConfirmed)
-            {
-                await transaction.RollbackAsync();
-                return new LoginResponse
-                {
-                    IsSuccess = false,
-                    Message = "This account cannot use email sign-in. Complete registration or contact support."
-                };
-            }
-
-            otp.IsUsed = true;
-            await _db.SaveChangesAsync();
-
-            if (user.SecuritySetting?.MfaEnabled == true)
-            {
-                var challenge = await CreateMfaChallengeAsync(user, new LoginRequest
-                {
-                    DeviceId = request.DeviceId ?? string.Empty,
-                    DeviceName = request.DeviceName
-                });
-                await transaction.CommitAsync();
-                return challenge;
-            }
-
-            var loginRequest = new LoginRequest
-            {
-                DeviceId = request.DeviceId ?? string.Empty,
-                DeviceName = request.DeviceName
-            };
-            var response = await CreateSession(user, loginRequest);
-            await transaction.CommitAsync();
-            return response;
-        }
-
         public async Task<(RefreshTokenResponse response, string refreshToken)> RefreshAsync(string refreshToken)
         {
             if (string.IsNullOrWhiteSpace(refreshToken))
@@ -1343,8 +1239,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new RegisterResponse
                 {
                     IsSuccess = false,
-                    Email = existingUser.Email,
-                    Message = "Email already registered"
+                    Message = "If this email can be registered, we'll send verification instructions. If you already have an account, please sign in."
                 };
             }
 
