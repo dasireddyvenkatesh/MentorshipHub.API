@@ -3,6 +3,7 @@ using AspNet.Security.OAuth.LinkedIn;
 using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.Twitter;
@@ -10,6 +11,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.WebUtilities;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace MentorshipHub.API.Presentation.Controllers
 {
@@ -19,21 +22,28 @@ namespace MentorshipHub.API.Presentation.Controllers
     {
         private const string RefreshTokenCookieName = "xqare_refresh_v2";
         private const string MfaChallengeCookieName = "xqare_mfa_challenge_v2";
+        private const string ExternalLinkTicketCookieName = "xqare_external_link_v2";
+        private const string ExternalLinkIntentKey = "xqare:auth-intent";
+        private const string ExternalLinkUserIdKey = "xqare:link-user-id";
+        private const string ExternalLinkSessionIdKey = "xqare:link-session-id";
         private readonly IAuthService _authService;
         private readonly IUserSessionService _userSessionService;
         private readonly IOAuthUserMapper _oauthUserMapper;
         private readonly IWebHostEnvironment _env;
+        private readonly IDataProtector _externalLinkTicketProtector;
 
         public AuthController(
             IAuthService authService,
             IUserSessionService userSessionService,
             IOAuthUserMapper oauthUserMapper,
-            IWebHostEnvironment env)
+            IWebHostEnvironment env,
+            IDataProtectionProvider dataProtectionProvider)
         {
             _authService = authService;
             _userSessionService = userSessionService;
             _oauthUserMapper = oauthUserMapper;
             _env = env;
+            _externalLinkTicketProtector = dataProtectionProvider.CreateProtector("XQARE.ExternalLoginLink.v1");
         }
 
         private static CookieOptions RefreshTokenCookieOptions() => new()
@@ -77,6 +87,61 @@ namespace MentorshipHub.API.Presentation.Controllers
         private string FrontendLoginUrl() => _env.IsDevelopment()
             ? "https://localhost:7161/login"
             : "https://sandbox.xqare.in/login";
+
+        private string FrontendSettingsUrl() => _env.IsDevelopment()
+            ? "https://localhost:7161/settings"
+            : "https://sandbox.xqare.in/settings";
+
+        private static CookieOptions ExternalLinkTicketCookieOptions() => new()
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.None,
+            Path = "/api/auth",
+            MaxAge = TimeSpan.FromMinutes(5)
+        };
+
+        private void ClearExternalLinkTicketCookie()
+            => Response.Cookies.Delete(ExternalLinkTicketCookieName, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/api/auth"
+            });
+
+        private static string? ResolveExternalProvider(string provider)
+        {
+            var supported = new[]
+            {
+                GoogleDefaults.AuthenticationScheme,
+                GitHubAuthenticationDefaults.AuthenticationScheme,
+                LinkedInAuthenticationDefaults.AuthenticationScheme,
+                TwitterDefaults.AuthenticationScheme
+            };
+
+            return supported.FirstOrDefault(x =>
+                x.Equals(provider, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private IActionResult ExternalLinkResult(bool succeeded, string message)
+        {
+            var url = QueryHelpers.AddQueryString(FrontendSettingsUrl(), new Dictionary<string, string?>
+            {
+                ["externalLink"] = succeeded ? "success" : "failed",
+                ["message"] = message
+            });
+            return Redirect(url);
+        }
+
+        private sealed class ExternalLinkTicket
+        {
+            public Guid UserId { get; set; }
+            public Guid SessionId { get; set; }
+            public string Provider { get; set; } = string.Empty;
+            public DateTime ExpiresAtUtc { get; set; }
+            public string Nonce { get; set; } = string.Empty;
+        }
 
         private IActionResult ExternalLoginFailure(string message)
         {
@@ -145,29 +210,93 @@ namespace MentorshipHub.API.Presentation.Controllers
         [HttpGet("{provider}-login")]
         public IActionResult ExternalLogin(string provider, string deviceId, string deviceName)
         {
-            var schemes = new List<string>
-            {
-                GoogleDefaults.AuthenticationScheme,
-                GitHubAuthenticationDefaults.AuthenticationScheme,
-                TwitterDefaults.AuthenticationScheme,
-                LinkedInAuthenticationDefaults.AuthenticationScheme
-            };
-
-            var scheme = schemes.FirstOrDefault(s =>
-                s.Equals(provider, StringComparison.OrdinalIgnoreCase));
-
+            var scheme = ResolveExternalProvider(provider);
             if (scheme == null)
                 return BadRequest("Invalid authentication provider");
 
             var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider = scheme });
-
-            var properties = new AuthenticationProperties
-            {
-                RedirectUri = redirectUrl
-            };
-
+            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
             properties.Items["deviceId"] = deviceId;
             properties.Items["deviceName"] = deviceName;
+            return Challenge(properties, scheme);
+        }
+
+        // The authenticated UI first calls this endpoint to obtain a short-lived,
+        // protected, HttpOnly browser ticket bound to its current XQARE user/session.
+        [Authorize]
+        [HttpPost("external-links/{provider}/begin")]
+        public IActionResult BeginExternalLink(string provider)
+        {
+            var scheme = ResolveExternalProvider(provider);
+            var userId = CurrentUserId();
+            var sessionId = CurrentSessionId();
+
+            if (scheme == null)
+                return BadRequest(new { isSuccess = false, message = "Invalid authentication provider." });
+
+            if (!userId.HasValue || !sessionId.HasValue)
+                return Unauthorized();
+
+            var ticket = new ExternalLinkTicket
+            {
+                UserId = userId.Value,
+                SessionId = sessionId.Value,
+                Provider = scheme,
+                ExpiresAtUtc = DateTime.UtcNow.AddMinutes(5),
+                Nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16))
+            };
+
+            var protectedTicket = _externalLinkTicketProtector.Protect(JsonSerializer.Serialize(ticket));
+            Response.Cookies.Append(ExternalLinkTicketCookieName, protectedTicket, ExternalLinkTicketCookieOptions());
+
+            return Ok(new MentorshipHub.API.Application.DTO.Common.ResponseDTO
+            {
+                IsSuccess = true,
+                Message = "Continue to your provider to connect this account."
+            });
+        }
+
+        // This endpoint is reached through full browser navigation after the
+        // authenticated begin request. The linking ticket is HttpOnly and Data-Protected.
+        [AllowAnonymous]
+        [HttpGet("{provider}-link")]
+        public IActionResult ExternalLink(string provider)
+        {
+            var scheme = ResolveExternalProvider(provider);
+            var protectedTicket = Request.Cookies[ExternalLinkTicketCookieName];
+            ClearExternalLinkTicketCookie();
+
+            if (scheme == null || string.IsNullOrWhiteSpace(protectedTicket))
+                return ExternalLinkResult(false, "The account-link request has expired. Try again from Settings.");
+
+            ExternalLinkTicket? ticket;
+            try
+            {
+                var json = _externalLinkTicketProtector.Unprotect(protectedTicket);
+                ticket = JsonSerializer.Deserialize<ExternalLinkTicket>(json);
+            }
+            catch
+            {
+                ticket = null;
+            }
+
+            if (ticket == null ||
+                ticket.UserId == Guid.Empty ||
+                ticket.SessionId == Guid.Empty ||
+                string.IsNullOrWhiteSpace(ticket.Nonce) ||
+                !string.Equals(ticket.Provider, scheme, StringComparison.OrdinalIgnoreCase) ||
+                ticket.ExpiresAtUtc <= DateTime.UtcNow)
+            {
+                return ExternalLinkResult(false, "The account-link request is invalid or has expired. Try again from Settings.");
+            }
+
+            var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider = scheme });
+            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
+            properties.Items[ExternalLinkIntentKey] = "link";
+            properties.Items[ExternalLinkUserIdKey] = ticket.UserId.ToString("D");
+            properties.Items[ExternalLinkSessionIdKey] = ticket.SessionId.ToString("D");
+            properties.Items["deviceId"] = string.Empty;
+            properties.Items["deviceName"] = string.Empty;
 
             return Challenge(properties, scheme);
         }
@@ -185,7 +314,24 @@ namespace MentorshipHub.API.Presentation.Controllers
             }
 
             var oauthUser = _oauthUserMapper.Map(provider, result.Principal, result.Properties);
+            var isLinkIntent =
+                result.Properties.Items.TryGetValue(ExternalLinkIntentKey, out var intent) &&
+                string.Equals(intent, "link", StringComparison.Ordinal);
+
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+            if (isLinkIntent)
+            {
+                if (!Guid.TryParse(result.Properties.Items.GetValueOrDefault(ExternalLinkUserIdKey), out var linkUserId) ||
+                    !Guid.TryParse(result.Properties.Items.GetValueOrDefault(ExternalLinkSessionIdKey), out var linkSessionId) ||
+                    string.IsNullOrWhiteSpace(oauthUser.ProviderId))
+                {
+                    return ExternalLinkResult(false, "The account-link request could not be validated. Start again from Settings.");
+                }
+
+                var linkResponse = await _authService.LinkExternalLoginAsync(linkUserId, linkSessionId, oauthUser);
+                return ExternalLinkResult(linkResponse.IsSuccess, linkResponse.Message);
+            }
 
             // A provider ID is required for every sign-in. Email and its verification
             // status are evaluated by AuthService; an already-linked identity may not
@@ -391,6 +537,18 @@ namespace MentorshipHub.API.Presentation.Controllers
                 AffectedSessions = revokedCount,
                 IsCurrentSession = false
             });
+        }
+
+        [Authorize]
+        [HttpGet("connected-accounts")]
+        public async Task<IActionResult> GetConnectedAccounts()
+        {
+            var userId = CurrentUserId();
+            if (!userId.HasValue)
+                return Unauthorized();
+
+            var response = await _authService.GetConnectedAccountsAsync(userId.Value);
+            return response.IsSuccess ? Ok(response) : NotFound(response);
         }
 
         [HttpPost("change-password")]
