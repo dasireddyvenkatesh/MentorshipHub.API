@@ -36,7 +36,10 @@ public sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
         // Sign-in validates presence only. Do not impose new length/complexity
         // restrictions on existing credentials during authentication.
         RuleFor(x => x.Password)
-            .NotEmpty().WithMessage("Password is required.");
+            .NotEmpty().WithMessage("Password is required.")
+            // Bound untrusted request work without imposing registration complexity
+            // rules on existing credentials.
+            .MaximumLength(1024).WithMessage("Password input is too long.");
 
         RuleFor(x => x.DeviceId).MaximumLength(256);
         RuleFor(x => x.DeviceName).MaximumLength(256);
