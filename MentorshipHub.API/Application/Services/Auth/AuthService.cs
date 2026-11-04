@@ -818,10 +818,6 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.OtpCode))
                 return new LoginResponse { IsSuccess = false, Message = "Email and verification code are required." };
 
-            var passwordValidation = ValidateRegistrationPassword(request.Password, request.ConfirmPassword);
-            if (passwordValidation != null)
-                return new LoginResponse { IsSuccess = false, Message = passwordValidation };
-
             // Serialize OTP consumption and OTP regeneration for this email.
             // GenerateEmailVerificationOtp uses the same PostgreSQL advisory lock.
             await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -893,6 +889,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             if (user.IsEmailConfirmed)
                 return new LoginResponse { IsSuccess = false, Message = "Email is already verified. Please sign in." };
+
+            // The OTP must be checked before password validation so malformed
+            // password submissions cannot bypass the OTP attempt counter.
+            var passwordValidation = ValidateRegistrationPassword(request.Password, request.ConfirmPassword);
+            if (passwordValidation != null)
+                return new LoginResponse { IsSuccess = false, Message = passwordValidation };
 
             // The person proving control of the mailbox chooses the final password.
             // This replaces any password stored by an earlier unverified registration attempt.
