@@ -841,8 +841,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 if (otp.LockedUntil.Value > now)
                 {
-                    var remainingMinutes = Math.Ceiling((otp.LockedUntil.Value - now).TotalMinutes);
-                    return new LoginResponse { IsSuccess = false, Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes." };
+                    var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling((otp.LockedUntil.Value - now).TotalSeconds));
+                    var remainingMinutes = Math.Ceiling(retryAfterSeconds / 60d);
+                    return new LoginResponse
+                    {
+                        IsSuccess = false,
+                        RetryAfterSeconds = retryAfterSeconds,
+                        Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes."
+                    };
                 }
 
                 otp.AttemptCount = 0;
