@@ -631,6 +631,66 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
         }
 
+        public async Task<ResponseDTO> DisconnectExternalLoginAsync(
+            Guid userId, Guid sessionId, string provider, string currentPassword)
+        {
+            var supportedProviders = new[] { "Google", "GitHub", "LinkedIn", "Twitter" };
+            provider = supportedProviders.FirstOrDefault(x =>
+                string.Equals(x, provider?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+
+            if (string.IsNullOrEmpty(provider))
+                return new ResponseDTO { IsSuccess = false, Message = "This sign-in provider is not supported." };
+
+            var now = DateTime.UtcNow;
+            var activeSession = await _db.UserSessions.AsNoTracking().AnyAsync(x =>
+                x.Id == sessionId &&
+                x.UserId == userId &&
+                !x.IsRevoked &&
+                x.RevokedAt == null &&
+                x.ExpiresAt > now);
+
+            if (!activeSession)
+                return new ResponseDTO { IsSuccess = false, Message = "Your XQARE session is no longer active. Sign in again before changing connected accounts." };
+
+            var user = await _db.Users.FirstOrDefaultAsync(x =>
+                x.Id == userId && x.IsActive && x.IsEmailConfirmed);
+
+            if (user == null)
+                return new ResponseDTO { IsSuccess = false, Message = "The XQARE account could not be verified." };
+
+            // Disconnect is a security-sensitive action. Require the local password
+            // as step-up verification and keep at least one independent local login path.
+            if (string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                return new ResponseDTO
+                {
+                    IsSuccess = false,
+                    Message = "Set up email and password sign-in before disconnecting a provider."
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(currentPassword) ||
+                !_hasher.Verify(user.PasswordHash, currentPassword))
+            {
+                return new ResponseDTO { IsSuccess = false, Message = "Your current password is incorrect." };
+            }
+
+            var externalLogin = await _db.ExternalLogins.FirstOrDefaultAsync(x =>
+                x.UserId == userId && x.Provider == provider);
+
+            if (externalLogin == null)
+                return new ResponseDTO { IsSuccess = false, Message = $"{provider} is not connected to this account." };
+
+            _db.ExternalLogins.Remove(externalLogin);
+            await _db.SaveChangesAsync();
+
+            return new ResponseDTO
+            {
+                IsSuccess = true,
+                Message = $"{provider} has been disconnected. Your XQARE email and password sign-in remains available."
+            };
+        }
+
         public async Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request)
         {
             if (request == null ||
