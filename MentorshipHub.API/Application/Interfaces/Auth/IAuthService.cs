@@ -17,7 +17,6 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task<TotpEnrollmentConfirmResponse> RegenerateTotpRecoveryCodesAsync(Guid userId, TotpRecoveryCodesRegenerateRequest request);
         Task<ResponseDTO> DisableTotpAsync(Guid userId, TotpDisableRequest request);
         Task<(RefreshTokenResponse response, string refreshToken)> RefreshAsync(string refreshToken);
-        Task<LoginResponse> VerifyEmailOtp(VerifyEmailOtpRequest request);
         Task<LoginResponse> VerifyRegisterEmailOtp(VerifyRegisterEmailOtpRequest request);
         Task<RegisterResponse> RegisterAsync(RegisterRequest request);
         Task<ConnectedAccountsResponse> GetConnectedAccountsAsync(Guid userId);
