@@ -5,6 +5,7 @@ namespace MentorshipHub.API.Application.DTO.Auth
     public class LoginResponse : ResponseDTO
     {
         public bool RequiresEmailVerification { get; set; }
+        public int? RetryAfterSeconds { get; set; }
         public bool RequiresMfa { get; set; }
         public string? MfaChallengeToken { get; set; }
 
