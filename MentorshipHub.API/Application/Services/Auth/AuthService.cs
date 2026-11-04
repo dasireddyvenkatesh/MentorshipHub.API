@@ -1258,11 +1258,23 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(refreshToken))
                 return (new RefreshTokenResponse { IsSuccess = false, Message = "Refresh token missing" }, default!);
 
-            var session = await _sessions.GetByTokenAsync(refreshToken);
-            var now = DateTime.UtcNow;
+            // Lock the current token row before validating and rotating it. A second tab
+            // presenting the same cookie waits for the first transaction, then finds that
+            // the old hash no longer exists instead of rotating it a second time.
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var tokenHash = _jwt.Hash(refreshToken);
+            var session = await _db.UserSessions
+                .FromSqlInterpolated($@"SELECT * FROM ""UserSessions""
+                    WHERE ""RefreshTokenHash"" = {tokenHash}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
 
-            if (session == null || session.IsRevoked || session.ExpiresAt <= now)
+            var now = DateTime.UtcNow;
+            if (session == null || session.IsRevoked || session.RevokedAt != null || session.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
                 return (new RefreshTokenResponse { IsSuccess = false, Message = "Login expired. Please sign in again." }, default!);
+            }
 
             // Enforce a maximum session lifetime in addition to the sliding seven-day window.
             if (session.CreatedAt.AddDays(30) <= now)
@@ -1270,23 +1282,24 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 session.IsRevoked = true;
                 session.RevokedAt = now;
                 await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
                 return (new RefreshTokenResponse { IsSuccess = false, Message = "Maximum session age reached. Please sign in again." }, default!);
             }
 
             var user = await _db.Users.FindAsync(session.UserId);
-
             if (user == null || !user.IsActive)
+            {
+                await transaction.RollbackAsync();
                 return (new RefreshTokenResponse { IsSuccess = false, Message = "Account is inactive. Please sign in again." }, default!);
+            }
 
             var roles = await GetRoles(user.Id);
             var permissions = await GetPermissions(user.Id);
-
             var newRefresh = _jwt.GenerateRefreshToken();
 
             await _sessions.RotateAsync(session, newRefresh);
 
             var accessToken = _jwt.GenerateAccessToken(user, roles, permissions, session.Id);
-
             var response = new RefreshTokenResponse
             {
                 AccessToken = accessToken,
@@ -1294,6 +1307,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 Message = "Refresh Token Updated"
             };
 
+            await transaction.CommitAsync();
             return (response, newRefresh);
         }
 
