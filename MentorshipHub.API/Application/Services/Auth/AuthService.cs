@@ -868,7 +868,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     otp.LockedUntil = now.AddHours(24);
                     await _db.SaveChangesAsync();
                     await transaction.CommitAsync();
-                    return new LoginResponse { IsSuccess = false, Message = "Too many incorrect attempts. Try again in 24 hours." };
+                    return new LoginResponse
+                    {
+                        IsSuccess = false,
+                        RetryAfterSeconds = 24 * 60 * 60,
+                        Message = "Too many incorrect attempts. Try again in 24 hours."
+                    };
                 }
 
                 await _db.SaveChangesAsync();
