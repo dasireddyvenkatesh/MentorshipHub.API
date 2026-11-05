@@ -186,7 +186,7 @@ namespace MentorshipHub.API.Application.Services.Admin
             {
                 var activeSuperAdmins = await _db.UserRoles.CountAsync(x =>
                     x.User.IsActive &&
-                    (x.Role.Code == SuperAdminCode || x.Role.Name == SuperAdminCode));
+                    x.Role.Code == SuperAdminCode);
 
                 if (activeSuperAdmins <= 1)
                 {
@@ -242,7 +242,6 @@ namespace MentorshipHub.API.Application.Services.Admin
         }
 
         private static bool IsSuperAdminRole(string? code, string? name)
-            => string.Equals(code, SuperAdminCode, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(name, SuperAdminCode, StringComparison.OrdinalIgnoreCase);
+            => string.Equals(code, SuperAdminCode, StringComparison.OrdinalIgnoreCase);
     }
 }
