@@ -136,7 +136,7 @@ namespace MentorshipHub.API.Application.Services.Email
 
             sb.Append("<h2 style='color:#333;'>Thank you for contacting us</h2>");
 
-            sb.Append($"<p>Hi {firstName},</p>");
+            sb.Append($"<p>Hi {Encode(firstName)},</p>");
 
             sb.Append("<p>Thank you for reaching out to <strong>XQARE</strong>. We have received your request and our support team will review it shortly.</p>");
 
