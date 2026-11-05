@@ -205,16 +205,42 @@ builder.Services.AddAuthentication(options =>
 
 });
 
+// Keep CORS and the cookie-authenticated Origin/CSRF check on the same
+// environment-specific allow-list. Production App Service settings must override
+// the sandbox defaults with the two production UI origins.
+var trustedBrowserOrigins = builder.Configuration
+    .GetSection("Security:TrustedBrowserOrigins")
+    .Get<string[]>()?
+    .Select(origin => origin.Trim())
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray() ?? Array.Empty<string>();
+
+if (trustedBrowserOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        "Security:TrustedBrowserOrigins must contain at least one trusted UI origin.");
+}
+
+foreach (var origin in trustedBrowserOrigins)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri) ||
+        originUri.AbsolutePath != "/" ||
+        !string.IsNullOrEmpty(originUri.Query) ||
+        !string.IsNullOrEmpty(originUri.Fragment) ||
+        !string.Equals(origin, originUri.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase) ||
+        !string.Equals(originUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException(
+            $"Invalid trusted browser origin '{origin}'. Configure an HTTPS origin without a path, query, or fragment.");
+    }
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowUI", policy =>
     {
-        policy.WithOrigins(
-                "https://localhost:7161",
-                "https://sandbox.xqare.in",
-                "https://www.sandbox.xqare.in",
-                "https://xqare.in",
-                "https://www.xqare.in")
+        policy.WithOrigins(trustedBrowserOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
