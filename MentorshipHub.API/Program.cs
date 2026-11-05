@@ -30,6 +30,8 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text;
 using System.Net;
+// TEMPORARILY DISABLED: Global exception handling is commented out for sandbox testing.
+// using MentorshipHub.API.Presentation.ExceptionHandling;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -281,6 +283,9 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());
 
+// TEMPORARILY DISABLED: Global exception handling is commented out for sandbox testing.
+// builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 
 var app = builder.Build();
@@ -289,6 +294,8 @@ var app = builder.Build();
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("AllowUI");
+// TEMPORARILY DISABLED: Global exception handling is commented out for sandbox testing.
+// app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
