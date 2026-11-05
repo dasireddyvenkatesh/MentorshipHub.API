@@ -5,6 +5,7 @@ using MentorshipHub.API.Application.DTO.ContactUs;
 using MentorshipHub.API.Application.DTO.Profile;
 using MentorshipHub.API.Application.Validators;
 using MentorshipHub.API.Presentation.Filters;
+using MentorshipHub.API.Presentation.ExceptionHandling;
 using MentorshipHub.API.Application.Classes.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Commom;
@@ -305,6 +306,7 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -313,6 +315,7 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.UseForwardedHeaders();
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseCors("AllowUI");
 app.UseAuthentication();
