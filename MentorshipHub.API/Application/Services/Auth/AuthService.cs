@@ -1441,9 +1441,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         private async Task<List<string>> GetRoles(Guid userId)
         {
+            // JWT role claims are authorization identifiers, so use the immutable
+            // role code (for example SUPERADMIN), not the display name (SuperAdmin).
             return await _db.UserRoles
                 .Where(x => x.UserId == userId)
-                .Select(x => x.Role.Name)
+                .Select(x => x.Role.Code)
                 .ToListAsync();
         }
 
