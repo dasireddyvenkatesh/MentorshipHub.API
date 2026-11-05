@@ -182,16 +182,14 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (string.IsNullOrWhiteSpace(origin))
                 return true; // Non-browser clients do not normally send Origin.
 
-            // Restore the previous hard-coded browser origin allow-list.
-            // Keep this list aligned with the AllowUI CORS policy in Program.cs.
-            var trustedOrigins = new[]
-            {
-                "https://localhost:7161",
-                "https://sandbox.xqare.in",
-                "https://www.sandbox.xqare.in",
-                "https://xqare.in",
-                "https://www.xqare.in"
-            };
+            // Use the same environment-specific allow-list as the CORS policy in Program.cs.
+            var trustedOrigins = _configuration
+                .GetSection("Security:TrustedBrowserOrigins")
+                .Get<string[]>()?
+                .Select(value => value.Trim())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? Array.Empty<string>();
 
             return trustedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
         }
