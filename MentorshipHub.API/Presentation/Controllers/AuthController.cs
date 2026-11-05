@@ -182,9 +182,11 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (string.IsNullOrWhiteSpace(origin))
                 return true; // Non-browser clients do not normally send Origin.
 
-            return string.Equals(origin, "https://sandbox.xqare.in", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(origin, "https://www.sandbox.xqare.in", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(origin, "https://localhost:7161", StringComparison.OrdinalIgnoreCase);
+            var trustedOrigins = _configuration
+                .GetSection("Security:TrustedBrowserOrigins")
+                .Get<string[]>() ?? Array.Empty<string>();
+
+            return trustedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
         }
 
         [AllowAnonymous]
