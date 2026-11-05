@@ -6,6 +6,16 @@ namespace MentorshipHub.API.Application.Services.Email
 {
     public class EmailTemplateService : IEmailTemplateService
     {
+        // Encode every dynamic value before inserting it into an HTML email.
+        // Email subjects are headers, so remove CR/LF to prevent header injection.
+        private static string Encode(string? value)
+            => HtmlEncoder.Default.Encode(value ?? string.Empty);
+
+        private static string SafeEmailSubject(string? value)
+            => (value ?? string.Empty)
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Trim();
         public (string subject, string body) BuildRegistrationOtp(string firstName, string otpCode)
         {
             string subject = "Your XQARE Email Verification Code";
@@ -20,14 +30,14 @@ namespace MentorshipHub.API.Application.Services.Email
 
             sb.Append("<h2 style='color:#333;'>Verify your email</h2>");
 
-            sb.Append($"<p>Hi {firstName},</p>");
+            sb.Append($"<p>Hi {Encode(firstName)},</p>");
 
             sb.Append("<p>");
             sb.Append("To complete your registration on <strong>XQARE</strong>, please use the verification code below.");
             sb.Append("</p>");
 
             sb.Append("<div style='font-size:30px;font-weight:bold;letter-spacing:5px;text-align:center;margin:30px 0;'>");
-            sb.Append(otpCode);
+            sb.Append(Encode(otpCode));
             sb.Append("</div>");
 
             sb.Append("<p>This code will expire in <strong>10 minutes</strong>.</p>");
@@ -91,8 +101,8 @@ namespace MentorshipHub.API.Application.Services.Email
         public (string subject, string body) BuildPasswordReset(string firstName, string resetUrl)
         {
             const string subject = "Reset your XQARE password";
-            var safeName = HtmlEncoder.Default.Encode(firstName ?? "there");
-            var safeUrl = HtmlEncoder.Default.Encode(resetUrl);
+            var safeName = Encode(string.IsNullOrWhiteSpace(firstName) ? "there" : firstName);
+            var safeUrl = Encode(resetUrl);
 
             var sb = new StringBuilder();
             sb.Append("<!DOCTYPE html>");
@@ -149,7 +159,7 @@ namespace MentorshipHub.API.Application.Services.Email
 
         public (string subject, string body) ContactUsSupportTemplate(string firstName, string email, string subject, string message)
         {
-            subject = $"New Contact Request - {subject}";
+            var safeSubject = SafeEmailSubject(subject);\n            subject = $"New Contact Request - {safeSubject}";
 
             var sb = new StringBuilder();
 
@@ -159,7 +169,7 @@ namespace MentorshipHub.API.Application.Services.Email
 
             sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
 
-            sb.Append($"<h2 style='color:#333;'>{subject}</h2>");
+            sb.Append($"<h2 style='color:#333;'>{Encode(safeSubject)}</h2>");
 
             sb.Append("<p>You have received a new contact request from the website.</p>");
 
@@ -167,17 +177,17 @@ namespace MentorshipHub.API.Application.Services.Email
 
             sb.Append("<tr>");
             sb.Append("<td style='padding:8px;font-weight:bold;'>Name:</td>");
-            sb.Append($"<td style='padding:8px;'>{firstName}</td>");
+            sb.Append($"<td style='padding:8px;'>{Encode(firstName)}</td>");
             sb.Append("</tr>");
 
             sb.Append("<tr>");
             sb.Append("<td style='padding:8px;font-weight:bold;'>Email:</td>");
-            sb.Append($"<td style='padding:8px;'>{email}</td>");
+            sb.Append($"<td style='padding:8px;'>{Encode(email)}</td>");
             sb.Append("</tr>");
 
             sb.Append("<tr>");
             sb.Append("<td style='padding:8px;font-weight:bold;'>Message:</td>");
-            sb.Append($"<td style='padding:8px;'>{message}</td>");
+            sb.Append($"<td style='padding:8px;white-space:pre-wrap;'>{Encode(message)}</td>");
             sb.Append("</tr>");
 
             sb.Append("</table>");
