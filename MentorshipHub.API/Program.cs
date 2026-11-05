@@ -30,7 +30,8 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text;
 using System.Net;
-using MentorshipHub.API.Presentation.ExceptionHandling;
+// TEMPORARILY DISABLED: Global exception handling will be investigated separately.
+// using MentorshipHub.API.Presentation.ExceptionHandling;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -308,14 +309,16 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());
 
-builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+// TEMPORARILY DISABLED: Global exception handling will be investigated separately.
+// builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-app.UseExceptionHandler();
+// TEMPORARILY DISABLED: Global exception handling will be investigated separately.
+// app.UseExceptionHandler();
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("AllowUI");
