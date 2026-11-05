@@ -71,14 +71,14 @@ namespace MentorshipHub.API.Application.Services.Email
 
             sb.Append("<h2 style='color:#333;'>Your new verification code</h2>");
 
-            sb.Append($"<p>Hi {firstName},</p>");
+            sb.Append($"<p>Hi {Encode(firstName)},</p>");
 
             sb.Append("<p>You requested a new verification code for your <strong>XQARE</strong> account.</p>");
 
             sb.Append("<p>Please use the code below to verify your email:</p>");
 
             sb.Append("<div style='font-size:32px;font-weight:bold;letter-spacing:6px;text-align:center;margin:30px 0;'>");
-            sb.Append(otpCode);
+            sb.Append(Encode(otpCode));
             sb.Append("</div>");
 
             sb.Append("<p>This code will expire in <strong>10 minutes</strong>.</p>");
@@ -159,7 +159,8 @@ namespace MentorshipHub.API.Application.Services.Email
 
         public (string subject, string body) ContactUsSupportTemplate(string firstName, string email, string subject, string message)
         {
-            var safeSubject = SafeEmailSubject(subject);\n            subject = $"New Contact Request - {safeSubject}";
+            var safeSubject = SafeEmailSubject(subject);
+            subject = $"New Contact Request - {safeSubject}";
 
             var sb = new StringBuilder();
 
