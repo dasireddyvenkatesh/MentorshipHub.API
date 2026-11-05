@@ -206,6 +206,11 @@ builder.Services.AddAuthentication(options =>
 
 });
 
+// TEMPORARILY DISABLED: environment-driven trusted-origin validation.
+// This block previously threw during startup when Security:TrustedBrowserOrigins
+// was missing or malformed. Restore environment-driven configuration after
+// the sandbox startup issue has been isolated.
+/*
 // Keep CORS and the cookie-authenticated Origin/CSRF check on the same
 // environment-specific allow-list. Production App Service settings must override
 // the sandbox defaults with the two production UI origins.
@@ -242,6 +247,24 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowUI", policy =>
     {
         policy.WithOrigins(trustedBrowserOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+*/
+
+// Restore the previously working hard-coded CORS allow-list.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowUI", policy =>
+    {
+        policy.WithOrigins(
+                "https://localhost:7161",
+                "https://sandbox.xqare.in",
+                "https://www.sandbox.xqare.in",
+                "https://xqare.in",
+                "https://www.xqare.in")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
