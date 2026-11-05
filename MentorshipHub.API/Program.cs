@@ -20,6 +20,7 @@ using MentorshipHub.API.Application.Services.Profile;
 using MentorshipHub.API.Application.Services.Email;
 using MentorshipHub.API.Enities;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
