@@ -5,6 +5,7 @@ using MentorshipHub.API.Application.DTO.ContactUs;
 using MentorshipHub.API.Application.DTO.Profile;
 using MentorshipHub.API.Application.Validators;
 using MentorshipHub.API.Presentation.Filters;
+using MentorshipHub.API.Presentation.Authorization;
 using MentorshipHub.API.Application.Classes.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Admin;
@@ -308,6 +309,16 @@ builder.Services.AddRateLimiter(options =>
             new { isSuccess = false, message = "Too many authentication requests from this network. Please try again later." },
             cancellationToken);
     };
+});
+
+builder.Services.AddScoped<IAuthorizationHandler, SuperAdminAuthorizationHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("SuperAdminOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.AddRequirements(new SuperAdminRequirement());
+    });
 });
 
 builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());

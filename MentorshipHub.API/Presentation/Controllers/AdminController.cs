@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MentorshipHub.API.Presentation.Controllers
 {
     [ApiController]
-    [Authorize(Roles = "SUPERADMIN")]
+    [Authorize(Policy = "SuperAdminOnly")]
     [Route("api/admin")]
     public sealed class AdminController : ControllerBase
     {
