@@ -21,18 +21,18 @@ namespace MentorshipHub.API.Presentation.Authorization
             if (!Guid.TryParse(context.User.FindFirst("uid")?.Value, out var userId))
                 return;
 
-            // Check the current database assignments on every authorization decision.
-            // This makes permission removals effective immediately instead of waiting
-            // for an access token containing older permission claims to expire.
-            var hasPermission = await _db.UserRoles
+            var isAuthorized = await _db.UserRoles
                 .AsNoTracking()
                 .AnyAsync(userRole =>
                     userRole.UserId == userId &&
                     userRole.User.IsActive &&
-                    userRole.Role.RolePermissions.Any(rolePermission =>
-                        rolePermission.Permission.Code == requirement.PermissionCode));
+                    (
+                        userRole.Role.Code == "SUPERADMIN" ||
+                        userRole.Role.RolePermissions.Any(rolePermission =>
+                            rolePermission.Permission.Code == requirement.PermissionCode)
+                    ));
 
-            if (hasPermission)
+            if (isAuthorized)
                 context.Succeed(requirement);
         }
     }
