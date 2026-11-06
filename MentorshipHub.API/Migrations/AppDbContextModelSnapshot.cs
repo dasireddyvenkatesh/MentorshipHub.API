@@ -461,6 +461,75 @@ namespace MentorshipHub.API.Migrations
                     b.ToTable("Permissions");
                 });
 
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Rbac.RbacAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActionCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AfterData")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("BeforeData")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TargetRoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TargetUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActionCode")
+                        .HasDatabaseName("IX_RbacAuditLogs_ActionCode");
+
+                    b.HasIndex("ActorUserId")
+                        .HasDatabaseName("IX_RbacAuditLogs_ActorUserId");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_RbacAuditLogs_CreatedAt");
+
+                    b.HasIndex("TargetRoleId")
+                        .HasDatabaseName("IX_RbacAuditLogs_TargetRoleId");
+
+                    b.HasIndex("TargetUserId")
+                        .HasDatabaseName("IX_RbacAuditLogs_TargetUserId");
+
+                    b.ToTable("RbacAuditLogs");
+                });
+
             modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Rbac.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -487,6 +556,24 @@ namespace MentorshipHub.API.Migrations
                         .IsUnique();
 
                     b.ToTable("Roles");
+                });
+
+            modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Rbac.RbacAuditLog", b =>
+                {
+                    b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Rbac.Role", null)
+                        .WithMany()
+                        .HasForeignKey("TargetRoleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MentorshipHub.API.Infrastructure.EntityModels.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("TargetUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("MentorshipHub.API.Infrastructure.EntityModels.Rbac.RolePermission", b =>
