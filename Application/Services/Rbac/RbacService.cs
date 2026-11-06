@@ -47,7 +47,8 @@ namespace MentorshipHub.API.Application.Services.Rbac
                     Id = x.Id,
                     Name = x.Name,
                     Code = x.Code,
-                    Module = x.Module
+                    Module = x.Module,
+                    Description = x.Description
                 })
                 .ToListAsync();
         }
@@ -76,7 +77,8 @@ namespace MentorshipHub.API.Application.Services.Rbac
                     Id = x.Permission.Id,
                     Name = x.Permission.Name,
                     Code = x.Permission.Code,
-                    Module = x.Permission.Module
+                    Module = x.Permission.Module,
+                    Description = x.Permission.Description
                 })
                 .ToListAsync();
 
