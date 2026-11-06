@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using MentorshipHub.API.Application.DTO.Admin;
 using MentorshipHub.API.Application.Interfaces.Admin;
 using Microsoft.AspNetCore.Authorization;
@@ -28,16 +27,29 @@ namespace MentorshipHub.API.Presentation.Controllers
         public async Task<ActionResult<AdminUsersResponse>> GetUsers(
             [FromQuery] string? search,
             [FromQuery] bool? isActive,
+            [FromQuery] string? roleCode,
+            [FromQuery] bool? isEmailConfirmed,
+            [FromQuery] DateTime? createdFromUtc,
+            [FromQuery] DateTime? createdToUtc,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
             if (search?.Length > 100)
                 return BadRequest(new { isSuccess = false, message = "Search text cannot exceed 100 characters." });
 
+            if (roleCode?.Length > 50)
+                return BadRequest(new { isSuccess = false, message = "Role code cannot exceed 50 characters." });
+
+            if (createdFromUtc.HasValue && createdToUtc.HasValue &&
+                createdFromUtc.Value > createdToUtc.Value)
+                return BadRequest(new { isSuccess = false, message = "The registration start date must be before or equal to the end date." });
+
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
-            return Ok(await _adminService.GetUsersAsync(search, isActive, page, pageSize));
+            return Ok(await _adminService.GetUsersAsync(
+                search, isActive, roleCode, isEmailConfirmed,
+                createdFromUtc, createdToUtc, page, pageSize));
         }
 
         [HttpGet("users/{userId:guid}")]
