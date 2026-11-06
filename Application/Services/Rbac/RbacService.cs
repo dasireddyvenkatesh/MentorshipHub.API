@@ -83,7 +83,8 @@ namespace MentorshipHub.API.Application.Services.Rbac
             return role;
         }
 
-        public async Task<RbacOperationResponse> CreateRoleAsync(Guid actorUserId, string name, string code)
+        public async Task<RbacOperationResponse> CreateRoleAsync(
+            Guid actorUserId, string name, string code, IReadOnlyCollection<string> permissionCodes)
         {
             name = name.Trim();
             code = code.Trim().ToUpperInvariant();
@@ -98,16 +99,42 @@ namespace MentorshipHub.API.Application.Services.Rbac
             if (await _db.Roles.AnyAsync(x => x.Code == code))
                 return Fail("ROLE_EXISTS", "A role with this code already exists.");
 
+            var requestedCodes = (permissionCodes ?? Array.Empty<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim().ToUpperInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            if (requestedCodes.Length > 200)
+                return Fail("TOO_MANY_PERMISSIONS", "A role cannot have more than 200 permissions.");
+
+            var permissions = await _db.Permissions
+                .Where(x => requestedCodes.Contains(x.Code))
+                .ToListAsync();
+
+            if (permissions.Count != requestedCodes.Length)
+                return Fail("UNKNOWN_PERMISSION", "One or more permission codes are not in the permission catalogue.");
+
             var role = new Role { Name = name, Code = code, IsSystem = false };
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
             _db.Roles.Add(role);
+            foreach (var permission in permissions)
+                _db.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });
+
             _audit.Add(actorUserId, "ROLE_CREATED", "ROLE", role.Id, targetRoleId: role.Id,
-                afterData: JsonSerializer.Serialize(new { role.Name, role.Code, role.IsSystem }));
+                afterData: JsonSerializer.Serialize(new
+                {
+                    role.Name,
+                    role.Code,
+                    role.IsSystem,
+                    PermissionCodes = requestedCodes
+                }));
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok("The role was created.");
+            return Ok("The role and its permissions were created.");
         }
 
         public async Task<RbacOperationResponse> UpdateRoleAsync(Guid actorUserId, Guid roleId, string name)

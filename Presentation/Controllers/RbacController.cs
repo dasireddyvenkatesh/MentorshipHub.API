@@ -30,7 +30,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!TryGetActor(out var actorId))
                 return Unauthorized();
 
-            var result = await _rbacService.CreateRoleAsync(actorId, request.Name, request.Code);
+            var result = await _rbacService.CreateRoleAsync(actorId, request.Name, request.Code, request.PermissionCodes ?? []);
             return MapResult(result);
         }
 

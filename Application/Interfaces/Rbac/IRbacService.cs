@@ -7,7 +7,7 @@ namespace MentorshipHub.API.Application.Interfaces.Rbac
         Task<IReadOnlyList<RoleResponse>> GetRolesAsync();
         Task<IReadOnlyList<PermissionResponse>> GetPermissionsAsync();
         Task<RolePermissionsResponse?> GetRolePermissionsAsync(Guid roleId);
-        Task<RbacOperationResponse> CreateRoleAsync(Guid actorUserId, string name, string code);
+        Task<RbacOperationResponse> CreateRoleAsync(Guid actorUserId, string name, string code, IReadOnlyCollection<string> permissionCodes);
         Task<RbacOperationResponse> UpdateRoleAsync(Guid actorUserId, Guid roleId, string name);
         Task<RbacOperationResponse> DeleteRoleAsync(Guid actorUserId, Guid roleId);
         Task<RbacOperationResponse> AssignRoleAsync(Guid actorUserId, Guid userId, Guid roleId);

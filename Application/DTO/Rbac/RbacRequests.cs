@@ -4,6 +4,7 @@ namespace MentorshipHub.API.Application.DTO.Rbac
     {
         public string Name { get; set; } = string.Empty;
         public string Code { get; set; } = string.Empty;
+        public List<string> PermissionCodes { get; set; } = [];
     }
 
     public sealed class UpdateRoleRequest
