@@ -14,6 +14,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             _contactService = contactService;
         }
 
+        [AllowAnonymous]
         [HttpPost]
         public async Task<IActionResult> ContactUs(ContactUsRequest request)
         {

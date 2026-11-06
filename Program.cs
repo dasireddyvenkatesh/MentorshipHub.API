@@ -321,6 +321,11 @@ builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddAuthorization(options =>
 {
+    // Secure by default: endpoints must explicitly opt out when they are public.
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+
     options.AddPolicy("SuperAdminOnly", policy =>
     {
         policy.RequireAuthenticatedUser();
