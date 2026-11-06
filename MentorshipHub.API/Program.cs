@@ -351,7 +351,6 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
-    await RbacPermissionCatalog.SeedAsync(db);
 }
 
 app.Run();
