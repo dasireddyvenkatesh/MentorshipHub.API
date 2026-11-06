@@ -42,20 +42,46 @@ namespace MentorshipHub.API.Application.Services.Admin
         }
 
         public async Task<AdminUsersResponse> GetUsersAsync(
-            string? search, bool? isActive, int page, int pageSize)
+            string? search,
+            bool? isActive,
+            string? roleCode,
+            bool? isEmailConfirmed,
+            DateTime? createdFromUtc,
+            DateTime? createdToUtc,
+            int page,
+            int pageSize)
         {
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
             var query = _db.Users
                 .AsNoTracking()
-                .Include(x => x.Profile)
-                .Include(x => x.UserRoles)
-                    .ThenInclude(x => x.Role)
                 .AsQueryable();
 
             if (isActive.HasValue)
                 query = query.Where(x => x.IsActive == isActive.Value);
+
+            if (isEmailConfirmed.HasValue)
+                query = query.Where(x => x.IsEmailConfirmed == isEmailConfirmed.Value);
+
+            if (!string.IsNullOrWhiteSpace(roleCode))
+            {
+                var normalizedRoleCode = roleCode.Trim().ToUpperInvariant();
+                query = query.Where(x => x.UserRoles.Any(userRole =>
+                    userRole.Role.Code.ToUpper() == normalizedRoleCode));
+            }
+
+            if (createdFromUtc.HasValue)
+            {
+                var fromUtc = NormalizeUtc(createdFromUtc.Value);
+                query = query.Where(x => x.CreatedAt >= fromUtc);
+            }
+
+            if (createdToUtc.HasValue)
+            {
+                var toUtc = NormalizeUtc(createdToUtc.Value);
+                query = query.Where(x => x.CreatedAt <= toUtc);
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -65,7 +91,10 @@ namespace MentorshipHub.API.Application.Services.Admin
                     x.Username.ToLower().Contains(term) ||
                     (x.Profile != null &&
                         (x.Profile.FirstName.ToLower().Contains(term) ||
-                         x.Profile.LastName.ToLower().Contains(term))));
+                         x.Profile.LastName.ToLower().Contains(term))) ||
+                    x.UserRoles.Any(userRole =>
+                        userRole.Role.Name.ToLower().Contains(term) ||
+                        userRole.Role.Code.ToLower().Contains(term)));
             }
 
             var totalCount = await query.CountAsync();
@@ -74,22 +103,14 @@ namespace MentorshipHub.API.Application.Services.Admin
                 .ThenBy(x => x.Email)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
-
-            return new AdminUsersResponse
-            {
-                Page = page,
-                PageSize = pageSize,
-                TotalCount = totalCount,
-                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
-                Items = users.Select(x => new AdminUserListItemResponse
+                .Select(x => new AdminUserListItemResponse
                 {
                     UserId = x.Id,
                     Email = x.Email,
                     Username = x.Username,
-                    FirstName = x.Profile?.FirstName ?? string.Empty,
-                    LastName = x.Profile?.LastName ?? string.Empty,
-                    ProfileImageUrl = x.Profile?.ProfileImageUrl,
+                    FirstName = x.Profile != null ? x.Profile.FirstName : string.Empty,
+                    LastName = x.Profile != null ? x.Profile.LastName : string.Empty,
+                    ProfileImageUrl = x.Profile != null ? x.Profile.ProfileImageUrl : null,
                     IsActive = x.IsActive,
                     IsEmailConfirmed = x.IsEmailConfirmed,
                     CreatedAt = x.CreatedAt,
@@ -98,9 +119,38 @@ namespace MentorshipHub.API.Application.Services.Admin
                         .Select(userRole => userRole.Role.Name)
                         .OrderBy(role => role)
                         .ToList()
-                }).ToList()
+                })
+                .ToListAsync();
+
+            var availableRoles = await _db.Roles
+                .AsNoTracking()
+                .OrderBy(x => x.IsSystem ? 0 : 1)
+                .ThenBy(x => x.Name)
+                .Select(x => new AdminUserRoleFilterOption
+                {
+                    Name = x.Name,
+                    Code = x.Code
+                })
+                .ToListAsync();
+
+            return new AdminUsersResponse
+            {
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+                AvailableRoles = availableRoles,
+                Items = users
             };
         }
+
+        private static DateTime NormalizeUtc(DateTime value)
+            => value.Kind switch
+            {
+                DateTimeKind.Utc => value,
+                DateTimeKind.Local => value.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            };
 
         public async Task<AdminUserDetailsResponse?> GetUserDetailsAsync(Guid userId)
         {
@@ -168,8 +218,6 @@ namespace MentorshipHub.API.Application.Services.Admin
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
-            // Serialize account-status changes so concurrent administrators cannot
-            // disable the final active Super Admin at the same time.
             const string lockKey = "xqare-admin-user-status";
             await _db.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
