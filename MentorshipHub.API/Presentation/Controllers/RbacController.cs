@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MentorshipHub.API.Presentation.Controllers
 {
     [ApiController]
-    [Authorize(Policy = "SuperAdminOnly")]
+    [Authorize]
     [Route("api/admin/rbac")]
     public sealed class RbacController : ControllerBase
     {
@@ -19,10 +19,12 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpGet("roles")]
+        [Authorize(Policy = "Permission:RBAC_ROLES_VIEW")]
         public async Task<ActionResult<IReadOnlyList<RoleResponse>>> GetRoles()
             => Ok(await _rbacService.GetRolesAsync());
 
         [HttpPost("roles")]
+        [Authorize(Policy = "Permission:RBAC_ROLES_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> CreateRole([FromBody] CreateRoleRequest request)
         {
             if (!TryGetActor(out var actorId))
@@ -33,6 +35,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPut("roles/{roleId:guid}")]
+        [Authorize(Policy = "Permission:RBAC_ROLES_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> UpdateRole(
             Guid roleId, [FromBody] UpdateRoleRequest request)
         {
@@ -43,6 +46,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpDelete("roles/{roleId:guid}")]
+        [Authorize(Policy = "Permission:RBAC_ROLES_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> DeleteRole(Guid roleId)
         {
             if (!TryGetActor(out var actorId))
@@ -52,10 +56,12 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpGet("permissions")]
+        [Authorize(Policy = "Permission:RBAC_PERMISSIONS_VIEW")]
         public async Task<ActionResult<IReadOnlyList<PermissionResponse>>> GetPermissions()
             => Ok(await _rbacService.GetPermissionsAsync());
 
         [HttpPut("roles/{roleId:guid}/permissions")]
+        [Authorize(Policy = "Permission:RBAC_PERMISSIONS_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> SetRolePermissions(
             Guid roleId, [FromBody] SetRolePermissionsRequest request)
         {
@@ -67,6 +73,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPost("assignments")]
+        [Authorize(Policy = "Permission:RBAC_ASSIGNMENTS_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> AssignRole([FromBody] RoleAssignmentRequest request)
         {
             if (!TryGetActor(out var actorId))
@@ -76,6 +83,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpDelete("assignments")]
+        [Authorize(Policy = "Permission:RBAC_ASSIGNMENTS_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> RemoveRole([FromBody] RoleAssignmentRequest request)
         {
             if (!TryGetActor(out var actorId))

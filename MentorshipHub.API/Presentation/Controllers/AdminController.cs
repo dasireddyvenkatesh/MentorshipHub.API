@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MentorshipHub.API.Presentation.Controllers
 {
     [ApiController]
-    [Authorize(Policy = "SuperAdminOnly")]
+    [Authorize]
     [Route("api/admin")]
     public sealed class AdminController : ControllerBase
     {
@@ -19,10 +19,12 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpGet("overview")]
+        [Authorize(Policy = "Permission:ADMIN_OVERVIEW_VIEW")]
         public async Task<ActionResult<AdminOverviewResponse>> GetOverview()
             => Ok(await _adminService.GetOverviewAsync());
 
         [HttpGet("users")]
+        [Authorize(Policy = "Permission:ADMIN_USERS_VIEW")]
         public async Task<ActionResult<AdminUsersResponse>> GetUsers(
             [FromQuery] string? search,
             [FromQuery] bool? isActive,
@@ -39,6 +41,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpGet("users/{userId:guid}")]
+        [Authorize(Policy = "Permission:ADMIN_USERS_VIEW")]
         public async Task<ActionResult<AdminUserDetailsResponse>> GetUserDetails(Guid userId)
         {
             var user = await _adminService.GetUserDetailsAsync(userId);
@@ -48,6 +51,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         [HttpPut("users/{userId:guid}/status")]
+        [Authorize(Policy = "Permission:ADMIN_USERS_MANAGE")]
         public async Task<ActionResult<AdminUserActionResponse>> UpdateUserStatus(
             Guid userId,
             [FromBody] UpdateAdminUserStatusRequest request)

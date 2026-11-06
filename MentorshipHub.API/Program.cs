@@ -317,6 +317,8 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddScoped<IAuthorizationHandler, SuperAdminAuthorizationHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("SuperAdminOnly", policy =>
