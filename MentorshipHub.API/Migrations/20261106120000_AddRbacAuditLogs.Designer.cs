@@ -11,8 +11,6 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace MentorshipHub.API.Migrations
 {
-    [DbContext(typeof(AppDbContext))]
-    [Migration("20261106120000_AddRbacAuditLogs")]
     partial class AddRbacAuditLogs
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
