@@ -382,11 +382,17 @@ var swaggerEnabled = app.Environment.IsDevelopment() ||
 
 if (swaggerEnabled)
 {
-    app.UseSwagger();
+    app.UseSwagger(options =>
+    {
+        // Keep the OpenAPI document available without exposing a /swagger route.
+        options.RouteTemplate = "openapi/{documentName}.json";
+    });
+
     app.UseSwaggerUI(options =>
     {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "XQARE MentorshipHub API v1");
-        options.RoutePrefix = "swagger";
+        options.SwaggerEndpoint("/openapi/v1.json", "XQARE MentorshipHub API v1");
+        // Serve Swagger UI directly from the application root.
+        options.RoutePrefix = string.Empty;
         options.DocumentTitle = "XQARE MentorshipHub API";
         options.DisplayRequestDuration();
         // Do not persist authorization tokens across browser sessions.
@@ -396,6 +402,17 @@ app.UseCors("AllowUI");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+
+// When Swagger is disabled, expose a minimal, non-sensitive API status response at /.
+if (!swaggerEnabled)
+{
+    app.MapGet("/", () => Results.Ok(new
+    {
+        application = "XQARE MentorshipHub API",
+        status = "Running",
+        message = "API is up and responding."
+    })).AllowAnonymous();
+}
 
 app.MapControllers();
 
