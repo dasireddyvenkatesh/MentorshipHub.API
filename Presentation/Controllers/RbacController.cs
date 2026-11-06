@@ -60,6 +60,14 @@ namespace MentorshipHub.API.Presentation.Controllers
         public async Task<ActionResult<IReadOnlyList<PermissionResponse>>> GetPermissions()
             => Ok(await _rbacService.GetPermissionsAsync());
 
+        [HttpGet("roles/{roleId:guid}/permissions")]
+        [Authorize(Policy = "Permission:RBAC_PERMISSIONS_VIEW")]
+        public async Task<ActionResult<RolePermissionsResponse>> GetRolePermissions(Guid roleId)
+        {
+            var result = await _rbacService.GetRolePermissionsAsync(roleId);
+            return result is null ? NotFound() : Ok(result);
+        }
+
         [HttpPut("roles/{roleId:guid}/permissions")]
         [Authorize(Policy = "Permission:RBAC_PERMISSIONS_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> SetRolePermissions(

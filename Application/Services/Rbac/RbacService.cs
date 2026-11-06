@@ -52,6 +52,37 @@ namespace MentorshipHub.API.Application.Services.Rbac
                 .ToListAsync();
         }
 
+        public async Task<RolePermissionsResponse?> GetRolePermissionsAsync(Guid roleId)
+        {
+            var role = await _db.Roles.AsNoTracking()
+                .Where(x => x.Id == roleId)
+                .Select(x => new RolePermissionsResponse
+                {
+                    RoleId = x.Id,
+                    RoleName = x.Name,
+                    RoleCode = x.Code
+                })
+                .FirstOrDefaultAsync();
+
+            if (role == null)
+                return null;
+
+            role.Permissions = await _db.RolePermissions.AsNoTracking()
+                .Where(x => x.RoleId == roleId)
+                .OrderBy(x => x.Permission.Module)
+                .ThenBy(x => x.Permission.Name)
+                .Select(x => new PermissionResponse
+                {
+                    Id = x.Permission.Id,
+                    Name = x.Permission.Name,
+                    Code = x.Permission.Code,
+                    Module = x.Permission.Module
+                })
+                .ToListAsync();
+
+            return role;
+        }
+
         public async Task<RbacOperationResponse> CreateRoleAsync(Guid actorUserId, string name, string code)
         {
             name = name.Trim();

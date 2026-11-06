@@ -24,4 +24,12 @@ namespace MentorshipHub.API.Application.DTO.Rbac
         public string Code { get; set; } = string.Empty;
         public string Module { get; set; } = string.Empty;
     }
+
+    public sealed class RolePermissionsResponse
+    {
+        public Guid RoleId { get; set; }
+        public string RoleName { get; set; } = string.Empty;
+        public string RoleCode { get; set; } = string.Empty;
+        public IReadOnlyList<PermissionResponse> Permissions { get; set; } = Array.Empty<PermissionResponse>();
+    }
 }
