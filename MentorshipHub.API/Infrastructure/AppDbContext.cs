@@ -31,6 +31,7 @@ namespace MentorshipHub.API.Enities
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<RbacAuditLog> RbacAuditLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -183,6 +184,60 @@ namespace MentorshipHub.API.Enities
             {
                 entity.HasKey(x => x.Id);
                 entity.HasIndex(x => x.Code).IsUnique();
+            });
+
+
+            builder.Entity<RbacAuditLog>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.ActionCode)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.TargetType)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.BeforeData)
+                    .HasColumnType("jsonb");
+
+                entity.Property(x => x.AfterData)
+                    .HasColumnType("jsonb");
+
+                entity.Property(x => x.IpAddress).HasMaxLength(64);
+                entity.Property(x => x.UserAgent).HasMaxLength(1024);
+                entity.Property(x => x.CorrelationId).HasMaxLength(128);
+
+                entity.HasIndex(x => x.CreatedAt)
+                    .HasDatabaseName("IX_RbacAuditLogs_CreatedAt");
+
+                entity.HasIndex(x => x.ActorUserId)
+                    .HasDatabaseName("IX_RbacAuditLogs_ActorUserId");
+
+                entity.HasIndex(x => x.TargetUserId)
+                    .HasDatabaseName("IX_RbacAuditLogs_TargetUserId");
+
+                entity.HasIndex(x => x.TargetRoleId)
+                    .HasDatabaseName("IX_RbacAuditLogs_TargetRoleId");
+
+                entity.HasIndex(x => x.ActionCode)
+                    .HasDatabaseName("IX_RbacAuditLogs_ActionCode");
+
+                entity.HasOne<User>()
+                    .WithMany()
+                    .HasForeignKey(x => x.ActorUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne<User>()
+                    .WithMany()
+                    .HasForeignKey(x => x.TargetUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne<Role>()
+                    .WithMany()
+                    .HasForeignKey(x => x.TargetRoleId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<RolePermission>(entity =>
