@@ -1,5 +1,12 @@
 namespace MentorshipHub.API.Application.DTO.Admin
 {
+    public sealed class AdminUserRoleAssignmentResponse
+    {
+        public Guid RoleId { get; set; }
+        public string RoleName { get; set; } = string.Empty;
+        public string RoleCode { get; set; } = string.Empty;
+    }
+
     public sealed class AdminUserDetailsResponse
     {
         public bool IsSuccess { get; set; } = true;
@@ -18,5 +25,6 @@ namespace MentorshipHub.API.Application.DTO.Admin
         public int ActiveSessionCount { get; set; }
         public int TotalSessionCount { get; set; }
         public List<string> Roles { get; set; } = new();
+        public List<AdminUserRoleAssignmentResponse> RoleAssignments { get; set; } = new();
     }
 }

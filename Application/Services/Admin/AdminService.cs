@@ -120,6 +120,16 @@ namespace MentorshipHub.API.Application.Services.Admin
                 !x.IsRevoked && x.RevokedAt == null && x.ExpiresAt > now);
             var totalSessions = await sessionQuery.CountAsync();
 
+            var roleAssignments = user.UserRoles
+                .OrderBy(userRole => userRole.Role.Name)
+                .Select(userRole => new AdminUserRoleAssignmentResponse
+                {
+                    RoleId = userRole.Role.Id,
+                    RoleName = userRole.Role.Name,
+                    RoleCode = userRole.Role.Code
+                })
+                .ToList();
+
             return new AdminUserDetailsResponse
             {
                 UserId = user.Id,
@@ -136,10 +146,10 @@ namespace MentorshipHub.API.Application.Services.Admin
                 LastLoginAt = user.LastLoginAt,
                 ActiveSessionCount = activeSessions,
                 TotalSessionCount = totalSessions,
-                Roles = user.UserRoles
-                    .Select(userRole => userRole.Role.Name)
-                    .OrderBy(role => role)
-                    .ToList()
+                Roles = roleAssignments
+                    .Select(role => role.RoleName)
+                    .ToList(),
+                RoleAssignments = roleAssignments
             };
         }
 
