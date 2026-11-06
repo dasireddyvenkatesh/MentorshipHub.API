@@ -376,30 +376,11 @@ app.UseHttpsRedirection();
 
 // Swagger is enabled automatically for local development. Enable it explicitly
 // for the sandbox App Service with the Swagger__Enabled=true setting.
-// Keep it disabled in production unless deliberately enabled.
 // Swagger is opt-in in every environment. Missing or false configuration keeps it disabled.
 var swaggerEnabled = app.Configuration.GetValue<bool>("Swagger:Enabled", false);
 
 if (swaggerEnabled)
 {
-    // Swashbuckle redirects an empty RoutePrefix (/) to index.html with HTTP 301.
-    // Intercept the root request with a temporary, non-cacheable redirect so browsers
-    // do not keep redirecting to Swagger after Swagger__Enabled is later turned off.
-    app.Use(async (context, next) =>
-    {
-        if ((HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method)) &&
-            context.Request.Path == "/")
-        {
-            context.Response.StatusCode = StatusCodes.Status302Found;
-            context.Response.Headers.Location = "index.html";
-            context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
-            context.Response.Headers.Pragma = "no-cache";
-            return;
-        }
-
-        await next();
-    });
-
     app.UseSwagger(options =>
     {
         // Keep the OpenAPI document available without exposing a /swagger route.
@@ -420,24 +401,6 @@ app.UseCors("AllowUI");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
-
-// When Swagger is disabled, expose a minimal, non-sensitive API status response at /.
-if (!swaggerEnabled)
-{
-    app.MapGet("/", (HttpContext context) =>
-    {
-        // Prevent browsers and intermediary caches from retaining a previous Swagger redirect.
-        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
-        context.Response.Headers.Pragma = "no-cache";
-
-        return Results.Ok(new
-        {
-            application = "XQARE MentorshipHub API",
-            status = "Running",
-            message = "API is up and responding."
-        });
-    }).AllowAnonymous();
-}
 
 app.MapControllers();
 
