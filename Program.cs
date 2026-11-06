@@ -377,9 +377,8 @@ app.UseHttpsRedirection();
 // Swagger is enabled automatically for local development. Enable it explicitly
 // for the sandbox App Service with the Swagger__Enabled=true setting.
 // Keep it disabled in production unless deliberately enabled.
-var swaggerEnabled =
-    app.Configuration.GetValue<bool?>("Swagger:Enabled")
-    ?? app.Environment.IsDevelopment();
+// Swagger is opt-in in every environment. Missing or false configuration keeps it disabled.
+var swaggerEnabled = app.Configuration.GetValue<bool>("Swagger:Enabled", false);
 
 if (swaggerEnabled)
 {
