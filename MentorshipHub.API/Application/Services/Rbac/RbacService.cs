@@ -111,6 +111,7 @@ namespace MentorshipHub.API.Application.Services.Rbac
             var role = await _db.Roles
                 .Include(x => x.UserRoles)
                 .Include(x => x.RolePermissions)
+                    .ThenInclude(x => x.Permission)
                 .FirstOrDefaultAsync(x => x.Id == roleId);
 
             if (role == null)
