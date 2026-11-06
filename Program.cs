@@ -28,6 +28,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.OpenApi;
+using MentorshipHub.API.Presentation.Swagger;
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -333,6 +335,30 @@ builder.Services.AddAuthorization(options =>
     });
 });
 
+// Generate an OpenAPI document for the controller-based API.
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "XQARE MentorshipHub API",
+        Version = "v1",
+        Description = "API documentation for the XQARE MentorshipHub platform."
+    });
+
+    // Swagger UI accepts the raw JWT and sends it as an Authorization: Bearer header.
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Paste the access token only. Swagger UI adds the Bearer prefix."
+    });
+
+    // Reflect the global fallback policy while leaving [AllowAnonymous] routes public.
+    options.OperationFilter<AuthorizationOperationFilter>();
+});
+
 builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());
 
 // TEMPORARILY DISABLED: Global exception handling will be investigated separately.
@@ -347,6 +373,25 @@ var app = builder.Build();
 // app.UseExceptionHandler();
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
+
+// Swagger is enabled automatically for local development. Enable it explicitly
+// for the sandbox App Service with the Swagger__Enabled=true setting.
+// Keep it disabled in production unless deliberately enabled.
+var swaggerEnabled = app.Environment.IsDevelopment() ||
+    app.Configuration.GetValue<bool>("Swagger:Enabled");
+
+if (swaggerEnabled)
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "XQARE MentorshipHub API v1");
+        options.RoutePrefix = "swagger";
+        options.DocumentTitle = "XQARE MentorshipHub API";
+        options.DisplayRequestDuration();
+        // Do not persist authorization tokens across browser sessions.
+    });
+}
 app.UseCors("AllowUI");
 app.UseAuthentication();
 app.UseAuthorization();
