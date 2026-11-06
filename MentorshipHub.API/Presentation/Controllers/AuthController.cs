@@ -216,6 +216,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(response);
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -235,6 +236,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(response);
         }
 
+        [AllowAnonymous]
         [HttpGet("{provider}-login")]
         public IActionResult ExternalLogin(string provider, string deviceId, string deviceName)
         {
@@ -329,6 +331,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Challenge(properties, scheme);
         }
 
+        [AllowAnonymous]
         [HttpGet("{provider}-response")]
         public async Task<IActionResult> ExternalResponse(string provider)
         {
@@ -398,6 +401,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return ExternalLoginFailure(response.Message ?? "External sign-in failed. Please try again.");
         }
 
+        [AllowAnonymous]
         [HttpPost("register")]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
@@ -407,6 +411,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(response);
         }
 
+        [AllowAnonymous]
         [HttpPost("resend-email-otp")]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> ResendEmailOtp([FromBody] EmailOtpRequest request)
@@ -434,6 +439,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return await CompleteMfaVerificationAsync(request, token);
         }
 
+        [AllowAnonymous]
         [HttpPost("verify-register-email-otp")]
         [EnableRateLimiting("otp-ip")]
         public async Task<IActionResult> VerifyRegisterEmailOtp([FromBody] VerifyRegisterEmailOtpRequest request)
@@ -648,6 +654,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(await _authService.DisableTotpAsync(id.Value, request));
         }
 
+        [AllowAnonymous]
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken()
         {
