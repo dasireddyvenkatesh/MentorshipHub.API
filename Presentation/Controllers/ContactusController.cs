@@ -1,6 +1,7 @@
 ﻿using MentorshipHub.API.Application.DTO.ContactUs;
 using MentorshipHub.API.Application.Interfaces.Contact;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace MentorshipHub.API.Presentation.Controllers
 {
