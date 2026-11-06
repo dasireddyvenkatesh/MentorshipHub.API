@@ -1454,7 +1454,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return await _db.UserRoles
                 .Where(x => x.UserId == userId)
                 .SelectMany(x => x.Role.RolePermissions)
-                .Select(x => x.Permission.Name)
+                .Select(x => x.Permission.Code)
                 .Distinct()
                 .ToListAsync();
         }
