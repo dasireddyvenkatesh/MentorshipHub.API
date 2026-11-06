@@ -178,13 +178,13 @@ namespace MentorshipHub.API.Enities
             {
                 entity.HasKey(x => x.Id);
                 entity.HasIndex(x => x.Code).IsUnique();
-                entity.Property(x => x.Description).IsRequired();
             });
 
             builder.Entity<Permission>(entity =>
             {
                 entity.HasKey(x => x.Id);
                 entity.HasIndex(x => x.Code).IsUnique();
+                entity.Property(x => x.Description).IsRequired();
             });
 
 
