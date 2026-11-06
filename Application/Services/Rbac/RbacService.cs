@@ -259,8 +259,8 @@ namespace MentorshipHub.API.Application.Services.Rbac
 
             if (role == null)
                 return Fail("NOT_FOUND", "The role could not be found.");
-            if (role.Code == SuperAdminCode)
-                return Fail("SUPERADMIN_PROTECTED", "SUPERADMIN permissions are protected.");
+            if (role.IsSystem || role.Code == SuperAdminCode)
+                return Fail("SYSTEM_ROLE_PROTECTED", "System role permissions are protected.");
 
             var requestedCodes = permissionCodes
                 .Where(x => !string.IsNullOrWhiteSpace(x))
