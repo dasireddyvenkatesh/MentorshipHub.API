@@ -282,6 +282,190 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
         }
 
+        private const string MfaRecoveryOtpPurpose = "mfa-recovery-otp";
+        private const string MfaRecoveryGrantPurpose = "mfa-recovery-grant";
+        private const string MfaRecoveryGenericMessage = "If the account is eligible, a recovery verification code will be sent to its registered email address.";
+
+        public async Task<ResponseDTO> RequestMfaAccountRecoveryAsync(MfaAccountRecoveryRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
+
+            var email = request.Email.Trim().ToLowerInvariant();
+            if (!new EmailAddressAttribute().IsValid(email))
+                return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
+
+            // Reuse the normal password validator so recovery observes the same
+            // account lockout, failed-attempt counters and password-hash upgrades.
+            var validation = await ValidatePasswordWithLockoutAsync(email, request.Password);
+            var user = validation.User;
+            if (!validation.IsValid || user == null || !user.IsActive || !user.IsEmailConfirmed ||
+                user.SecuritySetting?.MfaEnabled != true ||
+                !await _totp.IsEnabledAsync(user.Id))
+                return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
+
+            var now = DateTime.UtcNow;
+            string? otp = null;
+            MfaLoginChallenge? challenge = null;
+
+            await using (var transaction = await _db.Database.BeginTransactionAsync())
+            {
+                var lockKey = "mfa-recovery:" + user.Id.ToString("N");
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
+                var recentRequests = await _db.MfaLoginChallenges.CountAsync(x =>
+                    x.UserId == user.Id &&
+                    x.Purpose == MfaRecoveryOtpPurpose &&
+                    x.CreatedAt >= now.AddHours(-1));
+                if (recentRequests >= 3)
+                {
+                    await transaction.CommitAsync();
+                    return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
+                }
+
+                var outstanding = await _db.MfaLoginChallenges
+                    .Where(x => x.UserId == user.Id &&
+                                x.Purpose == MfaRecoveryOtpPurpose &&
+                                x.ConsumedAt == null)
+                    .ToListAsync();
+                foreach (var item in outstanding)
+                    item.ConsumedAt = now;
+
+                otp = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+                challenge = new MfaLoginChallenge
+                {
+                    UserId = user.Id,
+                    Purpose = MfaRecoveryOtpPurpose,
+                    TokenHash = HashMfaRecoveryOtp(user.Id, otp),
+                    ExpiresAt = now.AddMinutes(10),
+                    AttemptCount = 0,
+                    ConsumedAt = null
+                };
+                _db.MfaLoginChallenges.Add(challenge);
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+
+            try
+            {
+                var firstName = await _db.UserProfiles
+                    .Where(x => x.UserId == user.Id)
+                    .Select(x => x.FirstName)
+                    .FirstOrDefaultAsync();
+                var template = _emailTemplateService.BuildMfaAccountRecoveryOtp(
+                    string.IsNullOrWhiteSpace(firstName) ? user.Username : firstName, otp!);
+                var sent = await _emailService.SendEmail(user.Email, template.subject, template.body);
+                if (!sent)
+                    await ConsumeMfaRecoveryChallengeAsync(challenge!.Id);
+            }
+            catch
+            {
+                await ConsumeMfaRecoveryChallengeAsync(challenge!.Id);
+                // Keep the response generic and do not expose email delivery details.
+            }
+
+            return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
+        }
+
+        public async Task<MfaAccountRecoveryVerifyResponse> VerifyMfaAccountRecoveryOtpAsync(MfaAccountRecoveryVerifyRequest request)
+        {
+            const string genericFailure = "The recovery verification could not be completed. Request a new code and try again.";
+            if (request == null || string.IsNullOrWhiteSpace(request.Email) ||
+                string.IsNullOrWhiteSpace(request.OtpCode) ||
+                !System.Text.RegularExpressions.Regex.IsMatch(request.OtpCode, @"^\\d{6}$"))
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = genericFailure };
+
+            var email = request.Email.Trim().ToLowerInvariant();
+            var now = DateTime.UtcNow;
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var user = await _db.Users
+                .Include(x => x.SecuritySetting)
+                .FirstOrDefaultAsync(x => x.Email.ToLower() == email && x.IsActive && x.IsEmailConfirmed);
+            if (user?.SecuritySetting?.MfaEnabled != true)
+            {
+                await transaction.CommitAsync();
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = genericFailure };
+            }
+
+            var lockKey = "mfa-recovery:" + user.Id.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
+            var challenge = await _db.MfaLoginChallenges
+                .Where(x => x.UserId == user.Id &&
+                            x.Purpose == MfaRecoveryOtpPurpose &&
+                            x.ConsumedAt == null)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (challenge == null || challenge.ExpiresAt <= now || challenge.AttemptCount >= 5)
+            {
+                if (challenge != null && challenge.ConsumedAt == null)
+                    challenge.ConsumedAt = now;
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = genericFailure };
+            }
+
+            var expected = Convert.FromHexString(challenge.TokenHash);
+            var supplied = Convert.FromHexString(HashMfaRecoveryOtp(user.Id, request.OtpCode));
+            if (!CryptographicOperations.FixedTimeEquals(expected, supplied))
+            {
+                challenge.AttemptCount++;
+                if (challenge.AttemptCount >= 5)
+                    challenge.ConsumedAt = now;
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = genericFailure };
+            }
+
+            challenge.ConsumedAt = now;
+            var grant = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            _db.MfaLoginChallenges.Add(new MfaLoginChallenge
+            {
+                UserId = user.Id,
+                Purpose = MfaRecoveryGrantPurpose,
+                TokenHash = _jwt.Hash(grant),
+                ExpiresAt = now.AddMinutes(10),
+                AttemptCount = 0,
+                ConsumedAt = null
+            });
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return new MfaAccountRecoveryVerifyResponse
+            {
+                IsSuccess = true,
+                Message = "Recovery verification succeeded. Continue with authenticator replacement.",
+                RecoveryGrant = grant
+            };
+        }
+
+        private string HashMfaRecoveryOtp(Guid userId, string otp)
+        {
+            var jwtKey = _configuration["Jwt:Key"];
+            if (string.IsNullOrWhiteSpace(jwtKey))
+                throw new InvalidOperationException("The recovery OTP hash key is not configured.");
+            var purposeKey = HMACSHA256.HashData(
+                Encoding.UTF8.GetBytes(jwtKey),
+                Encoding.UTF8.GetBytes("XQARE.MfaRecoveryOtp.v1"));
+            var hash = HMACSHA256.HashData(
+                purposeKey,
+                Encoding.UTF8.GetBytes(userId.ToString("N") + ":" + otp));
+            return Convert.ToHexString(hash);
+        }
+
+        private async Task ConsumeMfaRecoveryChallengeAsync(Guid challengeId)
+        {
+            var challenge = await _db.MfaLoginChallenges.FirstOrDefaultAsync(x => x.Id == challengeId);
+            if (challenge != null && challenge.ConsumedAt == null)
+            {
+                challenge.ConsumedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+        }
+
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password))
