@@ -6,6 +6,8 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
     public interface IAuthService
     {
         Task<LoginResponse> LoginAsync(LoginRequest request);
+        Task<ResponseDTO> RequestMfaAccountRecoveryAsync(MfaAccountRecoveryRequest request);
+        Task<MfaAccountRecoveryVerifyResponse> VerifyMfaAccountRecoveryOtpAsync(MfaAccountRecoveryVerifyRequest request);
         Task<ResponseDTO> RequestPasswordResetAsync(ForgotPasswordRequest request);
         Task<ResponseDTO> ResetPasswordAsync(ResetPasswordRequest request);
         Task<ResponseDTO> ChangePasswordAsync(Guid userId, Guid currentSessionId, ChangePasswordRequest request);
