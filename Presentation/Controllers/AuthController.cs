@@ -449,9 +449,22 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             if (response.IsSuccess && !string.IsNullOrWhiteSpace(response.RefreshToken))
             {
-                SetRefreshTokenCookie(response.RefreshToken);
-                // Never place access or refresh tokens in URL/query strings.
-                return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), "externalLogin", "success"));
+                // The OAuth callback runs with the API as the top-level site. Do not
+                // issue the CHIPS refresh cookie here: it would be stored in the API
+                // partition rather than the XQARE top-level-site partition.
+                var exchangeCode = await _authService.CreateExternalLoginExchangeChallengeAsync(response.RefreshToken);
+                if (string.IsNullOrWhiteSpace(exchangeCode))
+                {
+                    await _userSessionService.RevokeAsync(response.RefreshToken);
+                    return ExternalLoginFailure("Sign-in could not be completed. Please try again.");
+                }
+
+                Response.Headers["Referrer-Policy"] = "no-referrer";
+                return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
+                {
+                    ["externalLogin"] = "success",
+                    ["code"] = exchangeCode
+                }));
             }
 
             if (response.IsSuccess && response.RequiresMfa && !string.IsNullOrWhiteSpace(response.MfaChallengeToken))
@@ -723,6 +736,24 @@ namespace MentorshipHub.API.Presentation.Controllers
             var id = CurrentUserId();
             if (!id.HasValue) return Unauthorized();
             return Ok(await _authService.DisableTotpAsync(id.Value, request));
+        }
+
+        [AllowAnonymous]
+        [HttpPost("external-login/exchange")]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> ExchangeExternalLogin([FromBody] string code)
+        {
+            if (!HasTrustedBrowserOrigin(requireSource: true))
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { isSuccess = false, message = "A trusted request origin is required." });
+
+            var result = await _authService.ExchangeExternalLoginChallengeAsync(code);
+            if (!result.IsSuccess || string.IsNullOrWhiteSpace(result.RefreshToken))
+                return Unauthorized(result);
+
+            SetRefreshTokenCookie(result.RefreshToken);
+            result.RefreshToken = string.Empty;
+            return Ok(result);
         }
 
         [AllowAnonymous]
