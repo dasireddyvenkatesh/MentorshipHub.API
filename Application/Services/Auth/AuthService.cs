@@ -527,6 +527,82 @@ namespace MentorshipHub.API.Application.Classes.Auth
             };
         }
 
+        public async Task<string?> CreateExternalLinkChallengeAsync(Guid userId, Guid sessionId)
+        {
+            var now = DateTime.UtcNow;
+
+            var eligibleUser = await _db.Users.AsNoTracking().AnyAsync(x =>
+                x.Id == userId && x.IsActive && x.IsEmailConfirmed);
+            var activeSession = await _db.UserSessions.AsNoTracking().AnyAsync(x =>
+                x.Id == sessionId &&
+                x.UserId == userId &&
+                !x.IsRevoked &&
+                x.RevokedAt == null &&
+                x.ExpiresAt > now);
+
+            if (!eligibleUser || !activeSession)
+                return null;
+
+            // The raw nonce is returned only to the controller so it can be placed
+            // inside the existing Data-Protected, HttpOnly OAuth linking ticket.
+            // Only its SHA-256 hash is persisted.
+            var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+            var tokenHash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(nonce)));
+
+            _db.MfaLoginChallenges.Add(new MfaLoginChallenge
+            {
+                UserId = userId,
+                TokenHash = tokenHash,
+                Purpose = "external-link",
+                ExpiresAt = now.AddMinutes(5),
+                AttemptCount = 0
+            });
+
+            await _db.SaveChangesAsync();
+            return nonce;
+        }
+
+        public async Task<bool> ConsumeExternalLinkChallengeAsync(Guid userId, string nonce)
+        {
+            if (userId == Guid.Empty ||
+                string.IsNullOrWhiteSpace(nonce) ||
+                nonce.Length != 64 ||
+                nonce.Any(character => !Uri.IsHexDigit(character)))
+            {
+                return false;
+            }
+
+            var tokenHash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(nonce)));
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            // The unique token-hash index locates one row. FOR UPDATE serializes
+            // concurrent callbacks so only one can consume this OAuth challenge.
+            var challenge = await _db.MfaLoginChallenges
+                .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
+                    WHERE ""TokenHash"" = {tokenHash}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            var now = DateTime.UtcNow;
+            if (challenge == null ||
+                challenge.UserId != userId ||
+                !string.Equals(challenge.Purpose, "external-link", StringComparison.Ordinal) ||
+                challenge.ConsumedAt.HasValue ||
+                challenge.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return false;
+            }
+
+            challenge.ConsumedAt = now;
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return true;
+        }
+
         public async Task<ResponseDTO> LinkExternalLoginAsync(Guid userId, Guid sessionId, ExternalLoginRequest request)
         {
             if (request == null ||
