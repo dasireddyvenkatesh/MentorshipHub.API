@@ -469,10 +469,17 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             if (response.IsSuccess && response.RequiresMfa && !string.IsNullOrWhiteSpace(response.MfaChallengeToken))
             {
-                SetMfaChallengeCookie(response.MfaChallengeToken);
+                // Transfer the short-lived MFA challenge into the XQARE cookie
+                // partition through the same top-level frontend exchange flow.
+                var exchangeCode = await _authService.CreateExternalMfaLoginExchangeChallengeAsync(response.MfaChallengeToken);
+                if (string.IsNullOrWhiteSpace(exchangeCode))
+                    return ExternalLoginFailure("The verification request could not be completed. Please sign in again.");
+
+                Response.Headers["Referrer-Policy"] = "no-referrer";
                 return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
                 {
                     ["mfa"] = "required",
+                    ["code"] = exchangeCode,
                     ["message"] = response.Message ?? "Enter your verification code to finish signing in."
                 }));
             }
@@ -748,8 +755,18 @@ namespace MentorshipHub.API.Presentation.Controllers
                     new { isSuccess = false, message = "A trusted request origin is required." });
 
             var result = await _authService.ExchangeExternalLoginChallengeAsync(code);
-            if (!result.IsSuccess || string.IsNullOrWhiteSpace(result.RefreshToken))
+            if (!result.IsSuccess)
                 return Unauthorized(result);
+
+            if (result.RequiresMfa && !string.IsNullOrWhiteSpace(result.MfaChallengeToken))
+            {
+                SetMfaChallengeCookie(result.MfaChallengeToken);
+                result.MfaChallengeToken = null;
+                return Ok(result);
+            }
+
+            if (string.IsNullOrWhiteSpace(result.RefreshToken))
+                return Unauthorized(new { isSuccess = false, message = "The sign-in exchange has expired. Please sign in again." });
 
             SetRefreshTokenCookie(result.RefreshToken);
             result.RefreshToken = string.Empty;
