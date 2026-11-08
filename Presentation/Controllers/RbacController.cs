@@ -111,6 +111,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return result.ErrorCode switch
             {
                 "NOT_FOUND" => NotFound(result),
+                "SUPERADMIN_REQUIRED" => StatusCode(StatusCodes.Status403Forbidden, result),
                 "ROLE_EXISTS" or "ALREADY_ASSIGNED" or "ROLE_IN_USE" or "SUPERADMIN_PROTECTED" or
                     "SYSTEM_ROLE_PROTECTED" or "RESERVED_ROLE" => Conflict(result),
                 _ => BadRequest(result)
