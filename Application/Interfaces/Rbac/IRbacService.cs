@@ -5,6 +5,7 @@ namespace MentorshipHub.API.Application.Interfaces.Rbac
     public interface IRbacService
     {
         Task<IReadOnlyList<RoleResponse>> GetRolesAsync();
+        Task<IReadOnlyList<RoleResponse>> GetAssignableRolesAsync(Guid actorUserId);
         Task<IReadOnlyList<PermissionResponse>> GetPermissionsAsync();
         Task<RolePermissionsResponse?> GetRolePermissionsAsync(Guid roleId);
         Task<RbacOperationResponse> CreateRoleAsync(Guid actorUserId, string name, string code, IReadOnlyCollection<string> permissionCodes);
