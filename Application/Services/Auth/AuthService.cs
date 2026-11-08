@@ -1067,6 +1067,52 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return code;
         }
 
+        public async Task<string?> CreateExternalMfaLoginExchangeChallengeAsync(string mfaChallengeToken)
+        {
+            if (string.IsNullOrWhiteSpace(mfaChallengeToken) || mfaChallengeToken.Length > 128)
+                return null;
+
+            var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(mfaChallengeToken)));
+            var now = DateTime.UtcNow;
+            var mfaChallenge = await _db.MfaLoginChallenges.AsNoTracking().FirstOrDefaultAsync(x =>
+                x.TokenHash == tokenHash &&
+                x.Purpose == "totp" &&
+                x.ConsumedAt == null &&
+                x.ExpiresAt > now);
+            if (mfaChallenge == null)
+                return null;
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var outstanding = await _db.MfaLoginChallenges.CountAsync(x =>
+                x.UserId == mfaChallenge.UserId &&
+                x.Purpose == "external-mfa" &&
+                x.ConsumedAt == null &&
+                x.ExpiresAt > now);
+            if (outstanding >= 5)
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+
+            var code = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            var codeHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
+            _db.MfaLoginChallenges.Add(new MfaLoginChallenge
+            {
+                UserId = mfaChallenge.UserId,
+                TokenHash = codeHash,
+                Purpose = "external-mfa",
+                DeviceId = mfaChallengeToken,
+                ExpiresAt = mfaChallenge.ExpiresAt < now.AddMinutes(2)
+                    ? mfaChallenge.ExpiresAt
+                    : now.AddMinutes(2),
+                AttemptCount = 0
+            });
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return code;
+        }
+
         public async Task<LoginResponse> ExchangeExternalLoginChallengeAsync(string code)
         {
             if (string.IsNullOrWhiteSpace(code) || code.Length > 128)
