@@ -311,7 +311,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 // external identity after email verification; email alone is insufficient.
                 user = await _db.Users.Include(x => x.SecuritySetting)
                     .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
-                if (user == null || user.PasswordHash != null ||
+                if (user == null || !string.IsNullOrWhiteSpace(user.PasswordHash) ||
                     !await _db.ExternalLogins.AnyAsync(x => x.UserId == user.Id))
                     return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
             }
