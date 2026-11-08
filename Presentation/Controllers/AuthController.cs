@@ -99,7 +99,18 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         private void SetMfaChallengeCookie(string token)
-            => Response.Cookies.Append(MfaChallengeCookieName, token, MfaChallengeCookieOptions());
+        {
+            // Remove any legacy unpartitioned challenge before setting the
+            // frontend-partitioned cookie so duplicate cookie names cannot race.
+            Response.Cookies.Delete(MfaChallengeCookieName, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/api/auth"
+            });
+            Response.Cookies.Append(MfaChallengeCookieName, token, MfaChallengeCookieOptions());
+        }
 
         private void ClearMfaChallengeCookie()
         {
