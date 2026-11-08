@@ -1026,6 +1026,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 .FromSqlInterpolated($@"SELECT * FROM ""UserSessions""
                     WHERE ""Id"" = {session.Id}
                     FOR UPDATE")
+                .AsNoTracking()
                 .FirstOrDefaultAsync();
 
             if (lockedSession == null ||
