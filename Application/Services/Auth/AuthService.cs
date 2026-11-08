@@ -407,7 +407,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var user = await _db.Users
                 .Include(x => x.SecuritySetting)
                 .FirstOrDefaultAsync(x => x.Email.ToLower() == email && x.IsActive && x.IsEmailConfirmed);
-            if (user?.SecuritySetting?.MfaEnabled != true || !await _totp.IsEnabledAsync(user.Id))
+            if (user == null || user.SecuritySetting?.MfaEnabled != true || !await _totp.IsEnabledAsync(user.Id))
             {
                 await transaction.CommitAsync();
                 return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = genericFailure };
