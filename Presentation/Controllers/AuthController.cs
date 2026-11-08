@@ -202,15 +202,12 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Redirect(url);
         }
 
-        // CORS controls whether a browser can read a response; validate Origin as well
-        // for cookie-authenticated POSTs to reduce cross-site request forgery risk.
-        private bool HasTrustedBrowserOrigin()
+        // CORS controls whether a browser can read a response; validate the request
+        // source independently for endpoints that authenticate with ambient cookies.
+        // Origin is preferred. Referer is an exact-origin fallback for legitimate clients
+        // where browsers or intermediaries omit Origin.
+        private bool HasTrustedBrowserOrigin(bool requireSource = false)
         {
-            var origin = Request.Headers["Origin"].ToString();
-            if (string.IsNullOrWhiteSpace(origin))
-                return true; // Non-browser clients do not normally send Origin.
-
-            // Use the same environment-specific allow-list as the CORS policy in Program.cs.
             var trustedOrigins = _configuration
                 .GetSection("Security:TrustedBrowserOrigins")
                 .Get<string[]>()?
@@ -219,7 +216,23 @@ namespace MentorshipHub.API.Presentation.Controllers
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray() ?? Array.Empty<string>();
 
-            return trustedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
+            var origin = Request.Headers["Origin"].ToString();
+            if (!string.IsNullOrWhiteSpace(origin))
+                return trustedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
+
+            var referer = Request.Headers["Referer"].ToString();
+            if (!string.IsNullOrWhiteSpace(referer))
+            {
+                if (!Uri.TryCreate(referer, UriKind.Absolute, out var refererUri))
+                    return false;
+
+                var refererOrigin = refererUri.GetLeftPart(UriPartial.Authority);
+                return trustedOrigins.Contains(refererOrigin, StringComparer.OrdinalIgnoreCase);
+            }
+
+            // Preserve non-browser, bearer-token callers only where the endpoint does
+            // not depend on an ambient cookie for authentication.
+            return !requireSource;
         }
 
         [AllowAnonymous]
@@ -457,12 +470,17 @@ namespace MentorshipHub.API.Presentation.Controllers
             // Prefer the short-lived challenge token explicitly returned to the
             // UI for password sign-in. Keep the HttpOnly cookie as a fallback for
             // external OAuth redirects that cannot carry a request body token.
-            var token = !string.IsNullOrWhiteSpace(request?.ChallengeToken)
-                ? request.ChallengeToken
-                : Request.Cookies[MfaChallengeCookieName];
+            var usesCookieChallenge = string.IsNullOrWhiteSpace(request?.ChallengeToken);
+            var token = usesCookieChallenge
+                ? Request.Cookies[MfaChallengeCookieName]
+                : request!.ChallengeToken;
 
             if (string.IsNullOrWhiteSpace(token))
                 return Unauthorized(new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
+
+            if (usesCookieChallenge && !HasTrustedBrowserOrigin(requireSource: true))
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { isSuccess = false, message = "A trusted request origin is required for cookie-based MFA verification." });
 
             return await CompleteMfaVerificationAsync(request, token);
         }
@@ -686,8 +704,10 @@ namespace MentorshipHub.API.Presentation.Controllers
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken()
         {
-            if (!HasTrustedBrowserOrigin())
-                return StatusCode(StatusCodes.Status403Forbidden, new { isSuccess = false, message = "Untrusted request origin." });
+            // Refresh authentication is exclusively cookie-based, so a trusted
+            // Origin or Referer is mandatory; missing source headers must not bypass CSRF validation.
+            if (!HasTrustedBrowserOrigin(requireSource: true))
+                return StatusCode(StatusCodes.Status403Forbidden, new { isSuccess = false, message = "A trusted request origin is required." });
 
             var refreshToken = Request.Cookies[RefreshTokenCookieName];
             if (string.IsNullOrWhiteSpace(refreshToken))
@@ -713,8 +733,12 @@ namespace MentorshipHub.API.Presentation.Controllers
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
-            if (!HasTrustedBrowserOrigin())
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Untrusted request origin." });
+            // Logout can be called with a bearer access token alone by non-browser
+            // clients. When the ambient refresh cookie is present, require a trusted
+            // Origin or Referer before revoking the cookie-backed session.
+            var hasRefreshCookie = !string.IsNullOrWhiteSpace(Request.Cookies[RefreshTokenCookieName]);
+            if (!HasTrustedBrowserOrigin(requireSource: hasRefreshCookie))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "A trusted request origin is required." });
 
             // Revoke the session identified by the current access token as well as
             // the refresh-cookie session. This covers browsers where the refresh cookie
