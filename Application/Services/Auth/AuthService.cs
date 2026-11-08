@@ -1003,6 +1003,140 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return await CreateSession(user, loginRequest);
         }
 
+        public async Task<string?> CreateExternalLoginExchangeChallengeAsync(string refreshToken)
+        {
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return null;
+
+            var session = await _sessions.GetByTokenAsync(refreshToken);
+            var now = DateTime.UtcNow;
+            if (session == null ||
+                session.IsRevoked ||
+                session.RevokedAt.HasValue ||
+                session.ExpiresAt <= now ||
+                session.User == null ||
+                !session.User.IsActive)
+            {
+                return null;
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var lockedSession = await _db.UserSessions
+                .FromSqlInterpolated($@"SELECT * FROM ""UserSessions""
+                    WHERE ""Id"" = {session.Id}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            if (lockedSession == null ||
+                lockedSession.UserId != session.UserId ||
+                lockedSession.IsRevoked ||
+                lockedSession.RevokedAt.HasValue ||
+                lockedSession.ExpiresAt <= now ||
+                !string.Equals(lockedSession.RefreshTokenHash, _jwt.Hash(refreshToken), StringComparison.Ordinal))
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+
+            var outstanding = await _db.MfaLoginChallenges.CountAsync(x =>
+                x.UserId == session.UserId &&
+                x.Purpose == "external-login" &&
+                x.ConsumedAt == null &&
+                x.ExpiresAt > now);
+            if (outstanding >= 5)
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+
+            var code = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            var codeHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
+            _db.MfaLoginChallenges.Add(new MfaLoginChallenge
+            {
+                UserId = session.UserId,
+                TokenHash = codeHash,
+                Purpose = "external-login",
+                DeviceId = session.Id.ToString("D"),
+                ExpiresAt = now.AddMinutes(2),
+                AttemptCount = 0
+            });
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return code;
+        }
+
+        public async Task<LoginResponse> ExchangeExternalLoginChallengeAsync(string code)
+        {
+            if (string.IsNullOrWhiteSpace(code) || code.Length > 128)
+                return new LoginResponse { IsSuccess = false, Message = "The sign-in exchange has expired. Please sign in again." };
+
+            var codeHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var challenge = await _db.MfaLoginChallenges
+                .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
+                    WHERE ""TokenHash"" = {codeHash}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            var now = DateTime.UtcNow;
+            if (challenge == null ||
+                !string.Equals(challenge.Purpose, "external-login", StringComparison.Ordinal) ||
+                challenge.ConsumedAt.HasValue ||
+                challenge.ExpiresAt <= now ||
+                !Guid.TryParse(challenge.DeviceId, out var sessionId))
+            {
+                await transaction.RollbackAsync();
+                return new LoginResponse { IsSuccess = false, Message = "The sign-in exchange has expired. Please sign in again." };
+            }
+
+            var session = await _db.UserSessions
+                .FromSqlInterpolated($@"SELECT * FROM ""UserSessions""
+                    WHERE ""Id"" = {sessionId}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            var user = session == null ? null : await _db.Users.FindAsync(session.UserId);
+            if (session == null ||
+                session.UserId != challenge.UserId ||
+                session.IsRevoked ||
+                session.RevokedAt.HasValue ||
+                session.ExpiresAt <= now ||
+                user == null ||
+                !user.IsActive ||
+                !user.IsEmailConfirmed)
+            {
+                challenge.ConsumedAt = now;
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return new LoginResponse { IsSuccess = false, Message = "The sign-in session is no longer valid. Please sign in again." };
+            }
+
+            challenge.ConsumedAt = now;
+            var newRefreshToken = _jwt.GenerateRefreshToken();
+            await _sessions.RotateAsync(session, newRefreshToken);
+
+            var roles = await GetRoles(user.Id);
+            var permissions = await GetPermissions(user.Id);
+            var accessToken = _jwt.GenerateAccessToken(user, roles, permissions, session.Id);
+
+            var response = new LoginResponse
+            {
+                IsSuccess = true,
+                AccessToken = accessToken,
+                RefreshToken = newRefreshToken,
+                Email = user.Email,
+                UserId = user.Id,
+                UserPublicId = _publicIdService.Encode(user.Id),
+                Message = "Login successful"
+            };
+
+            await transaction.CommitAsync();
+            return response;
+        }
+
         public async Task<EmailOtpResponse> ResendEmailOtp(EmailOtpRequest request)
         {
             var email = request?.Email?.Trim().ToLowerInvariant() ?? string.Empty;
