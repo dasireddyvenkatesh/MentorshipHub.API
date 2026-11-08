@@ -491,11 +491,9 @@ namespace MentorshipHub.API.Presentation.Controllers
                 }
 
                 Response.Headers["Referrer-Policy"] = "no-referrer";
-                return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
-                {
-                    ["externalLogin"] = "success",
-                    ["code"] = exchangeCode
-                }));
+                // Put the short-lived code in the URL fragment: fragments are
+                // not sent to the API, HTTP access logs, or Referer headers.
+                return Redirect($"{FrontendLoginUrl()}#externalLogin=success&code={Uri.EscapeDataString(exchangeCode)}");
             }
 
             if (response.IsSuccess && response.RequiresMfa && !string.IsNullOrWhiteSpace(response.MfaChallengeToken))
@@ -507,12 +505,9 @@ namespace MentorshipHub.API.Presentation.Controllers
                     return ExternalLoginFailure("The verification request could not be completed. Please sign in again.");
 
                 Response.Headers["Referrer-Policy"] = "no-referrer";
-                return Redirect(QueryHelpers.AddQueryString(FrontendLoginUrl(), new Dictionary<string, string?>
-                {
-                    ["mfa"] = "required",
-                    ["code"] = exchangeCode,
-                    ["message"] = response.Message ?? "Enter your verification code to finish signing in."
-                }));
+                var mfaMessage = Uri.EscapeDataString(
+                    response.Message ?? "Enter your verification code to finish signing in.");
+                return Redirect($"{FrontendLoginUrl()}#mfa=required&code={Uri.EscapeDataString(exchangeCode)}&message={mfaMessage}");
             }
 
             return ExternalLoginFailure(response.Message ?? "External sign-in failed. Please try again.");
