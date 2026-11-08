@@ -265,6 +265,7 @@ builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddHostedService<ExternalLinkChallengeCleanupService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IRbacAuditService, RbacAuditService>();
 builder.Services.AddScoped<IRbacService, RbacService>();
