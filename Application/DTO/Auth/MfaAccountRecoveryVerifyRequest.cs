@@ -8,7 +8,7 @@ namespace MentorshipHub.API.Application.DTO.Auth
         [Required, EmailAddress, StringLength(256)]
         public string Email { get; set; } = string.Empty;
 
-        [Required, RegularExpression(@"^\\d{6}$")]
+        [Required, RegularExpression(@"^\d{6}$")]
         public string OtpCode { get; set; } = string.Empty;
     }
 
