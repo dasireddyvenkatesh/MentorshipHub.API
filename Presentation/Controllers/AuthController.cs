@@ -49,15 +49,23 @@ namespace MentorshipHub.API.Presentation.Controllers
             _externalLinkTicketProtector = dataProtectionProvider.CreateProtector("XQARE.ExternalLoginLink.v1");
         }
 
-        private static CookieOptions RefreshTokenCookieOptions() => new()
+        private static CookieOptions RefreshTokenCookieOptions()
         {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.None,
-            // Scope the refresh cookie to authentication endpoints only.
-            Path = "/api/auth",
-            MaxAge = TimeSpan.FromDays(7)
-        };
+            var options = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                // Scope the refresh cookie to authentication endpoints only.
+                Path = "/api/auth",
+                MaxAge = TimeSpan.FromDays(7)
+            };
+
+            // CHIPS: keep this cross-site API cookie available only within the
+            // top-level XQARE site partition, without unrestricted third-party access.
+            options.Extensions.Add("Partitioned");
+            return options;
+        }
 
         private void SetRefreshTokenCookie(string token)
             => Response.Cookies.Append(RefreshTokenCookieName, token, RefreshTokenCookieOptions());
@@ -79,13 +87,19 @@ namespace MentorshipHub.API.Presentation.Controllers
             => Guid.TryParse(User.FindFirst("sid")?.Value, out var sessionId) ? sessionId : null;
 
         private void ClearRefreshTokenCookie()
-            => Response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions
+        {
+            var options = new CookieOptions
             {
                 HttpOnly = true,
                 Secure = true,
                 SameSite = SameSiteMode.None,
                 Path = "/api/auth"
-            });
+            };
+
+            // Match the partition attribute and scope when expiring the cookie.
+            options.Extensions.Add("Partitioned");
+            Response.Cookies.Delete(RefreshTokenCookieName, options);
+        }
 
         private string FrontendBaseUrl()
         {
