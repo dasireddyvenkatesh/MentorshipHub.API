@@ -23,6 +23,16 @@ namespace MentorshipHub.API.Presentation.Controllers
         public async Task<ActionResult<IReadOnlyList<RoleResponse>>> GetRoles()
             => Ok(await _rbacService.GetRolesAsync());
 
+        [HttpGet("roles/assignable")]
+        [Authorize(Policy = "Permission:RBAC_ASSIGNMENTS_MANAGE")]
+        public async Task<ActionResult<IReadOnlyList<RoleResponse>>> GetAssignableRoles()
+        {
+            if (!TryGetActor(out var actorId))
+                return Unauthorized();
+
+            return Ok(await _rbacService.GetAssignableRolesAsync(actorId));
+        }
+
         [HttpPost("roles")]
         [Authorize(Policy = "Permission:RBAC_ROLES_MANAGE")]
         public async Task<ActionResult<RbacOperationResponse>> CreateRole([FromBody] CreateRoleRequest request)
