@@ -1631,7 +1631,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             const string failure = "The recovery session is invalid or has expired. Request account recovery again.";
             if (request == null || string.IsNullOrWhiteSpace(request.RecoveryGrant) ||
                 request.RecoveryGrant.Length > 128 || string.IsNullOrWhiteSpace(request.Code) ||
-                !System.Text.RegularExpressions.Regex.IsMatch(request.Code, @"^\\d{6}$"))
+                !System.Text.RegularExpressions.Regex.IsMatch(request.Code, @"^\d{6}$"))
                 return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Enter a valid recovery session and six-digit authenticator code." };
 
             var grantHash = _jwt.Hash(request.RecoveryGrant.Trim());
