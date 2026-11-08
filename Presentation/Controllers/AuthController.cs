@@ -670,6 +670,13 @@ namespace MentorshipHub.API.Presentation.Controllers
         public async Task<IActionResult> CompleteMfaAccountRecovery([FromBody] MfaAccountRecoveryCompleteRequest request)
         {
             var response = await _authService.CompleteMfaAccountRecoveryAsync(request);
+            if (response.IsSuccess)
+            {
+                // The recovery operation revokes every session, including any stale
+                // browser session cookies that may still be present on this device.
+                ClearRefreshTokenCookie();
+                ClearMfaChallengeCookie();
+            }
             return Ok(response);
         }
 
