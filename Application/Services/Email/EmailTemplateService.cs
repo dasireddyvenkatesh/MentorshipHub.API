@@ -98,6 +98,46 @@ namespace MentorshipHub.API.Application.Services.Email
             return (subject, sb.ToString());
         }
 
+
+        public (string subject, string body) BuildMfaAccountRecoveryOtp(string firstName, string otpCode)
+        {
+            const string subject = "XQARE – Account Recovery Verification Code";
+            var safeName = Encode(string.IsNullOrWhiteSpace(firstName) ? "there" : firstName);
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html><html><body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+            sb.Append("<h2 style='color:#0f2a44;'>Verify your account recovery</h2>");
+            sb.Append($"<p>Hi {safeName},</p>");
+            sb.Append("<p>We received a request to recover access to your XQARE account because the authenticator and recovery codes may no longer be available.</p>");
+            sb.Append("<p>Enter this verification code to continue:</p>");
+            sb.Append("<div style='font-size:30px;font-weight:bold;letter-spacing:5px;text-align:center;margin:30px 0;'>");
+            sb.Append(Encode(otpCode));
+            sb.Append("</div>");
+            sb.Append("<p>This code expires in <strong>10 minutes</strong> and can be used only once.</p>");
+            sb.Append("<p style='color:#777;'>Never share this code with anyone. XQARE support will never ask you to disclose it.</p>");
+            sb.Append("<p style='color:#777;'>If you did not request account recovery, do not use this code. You can ignore this email; your authenticator settings will not be changed by this email alone.</p>");
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+            sb.Append("</div></body></html>");
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) BuildMfaAccountRecoveryCompleted(string firstName)
+        {
+            const string subject = "XQARE – MFA Account Recovery Completed";
+            var safeName = Encode(string.IsNullOrWhiteSpace(firstName) ? "there" : firstName);
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html><html><body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+            sb.Append("<h2 style='color:#0f2a44;'>Your account security settings were updated</h2>");
+            sb.Append($"<p>Hi {safeName},</p>");
+            sb.Append("<p>MFA account recovery for your XQARE account has been completed.</p>");
+            sb.Append("<p>Your previous authenticator and unused recovery codes have been invalidated, and all existing sessions were signed out. A new authenticator was enrolled and new recovery codes were generated.</p>");
+            sb.Append("<p style='color:#777;'>If you did not perform this recovery, contact XQARE support immediately and secure the email account associated with your XQARE account.</p>");
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+            sb.Append("</div></body></html>");
+            return (subject, sb.ToString());
+        }
+
         public (string subject, string body) BuildPasswordReset(string firstName, string resetUrl)
         {
             const string subject = "Reset your XQARE password";
