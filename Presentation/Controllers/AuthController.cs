@@ -28,11 +28,15 @@ namespace MentorshipHub.API.Presentation.Controllers
         private const string ExternalLinkSessionIdKey = "xqare:link-session-id";
         private const string ExternalLinkNonceKey = "xqare:link-nonce";
         private const string ExternalLinkProviderKey = "xqare:link-provider";
+        private const string MfaRecoveryIntentKey = "xqare:mfa-recovery-intent";
+        private const string MfaRecoveryEmailProofKey = "xqare:mfa-recovery-email-proof";
+        private const string MfaRecoveryTicketCookieName = "xqare_mfa_recovery_v1";
         private readonly IAuthService _authService;
         private readonly IUserSessionService _userSessionService;
         private readonly IOAuthUserMapper _oauthUserMapper;
         private readonly IWebHostEnvironment _env;
         private readonly IDataProtector _externalLinkTicketProtector;
+        private readonly IDataProtector _mfaRecoveryTicketProtector;
         private readonly IConfiguration _configuration;
 
         public AuthController(
@@ -49,6 +53,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             _env = env;
             _configuration = configuration;
             _externalLinkTicketProtector = dataProtectionProvider.CreateProtector("XQARE.ExternalLoginLink.v1");
+            _mfaRecoveryTicketProtector = dataProtectionProvider.CreateProtector("XQARE.MfaRecoveryOAuth.v1");
         }
 
         private static CookieOptions RefreshTokenCookieOptions()
@@ -215,6 +220,30 @@ namespace MentorshipHub.API.Presentation.Controllers
             });
             return Redirect(url);
         }
+
+        private sealed class MfaRecoveryOAuthTicket
+        {
+            public string Provider { get; set; } = string.Empty;
+            public string EmailProof { get; set; } = string.Empty;
+            public DateTime ExpiresAtUtc { get; set; }
+        }
+
+        private static CookieOptions MfaRecoveryTicketCookieOptions() => new()
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.None,
+            Path = "/api/auth",
+            MaxAge = TimeSpan.FromMinutes(5),
+            Extensions = { "Partitioned" }
+        };
+
+        private void ClearMfaRecoveryTicketCookie()
+            => Response.Cookies.Delete(MfaRecoveryTicketCookieName, new CookieOptions
+            {
+                HttpOnly = true, Secure = true, SameSite = SameSiteMode.None,
+                Path = "/api/auth", Extensions = { "Partitioned" }
+            });
 
         private sealed class ExternalLinkTicket
         {
@@ -428,6 +457,12 @@ namespace MentorshipHub.API.Presentation.Controllers
             var isLinkIntent =
                 result.Properties.Items.TryGetValue(ExternalLinkIntentKey, out var intent) &&
                 string.Equals(intent, "link", StringComparison.Ordinal);
+            var isMfaRecoveryIntent =
+                result.Properties.Items.TryGetValue(MfaRecoveryIntentKey, out var recoveryIntent) &&
+                string.Equals(recoveryIntent, "recover", StringComparison.Ordinal);
+            var recoveryEmailProof = result.Properties.Items.TryGetValue(MfaRecoveryEmailProofKey, out var storedEmailProof)
+                ? storedEmailProof
+                : null;
 
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
@@ -466,6 +501,19 @@ namespace MentorshipHub.API.Presentation.Controllers
 
                 var linkResponse = await _authService.LinkExternalLoginAsync(linkUserId, linkSessionId, oauthUser);
                 return ExternalLinkResult(linkResponse.IsSuccess, linkResponse.Message);
+            }
+
+            if (isMfaRecoveryIntent)
+            {
+                if (string.IsNullOrWhiteSpace(recoveryEmailProof) || string.IsNullOrWhiteSpace(oauthUser.ProviderId))
+                    return ExternalLoginFailure("The recovery verification could not be completed. Start account recovery again.");
+
+                var recovery = await _authService.CompleteExternalMfaRecoveryAsync(recoveryEmailProof, oauthUser);
+                if (!recovery.IsSuccess || string.IsNullOrWhiteSpace(recovery.RecoveryGrant))
+                    return ExternalLoginFailure(recovery.Message ?? "The linked provider could not be verified.");
+
+                Response.Headers["Referrer-Policy"] = "no-referrer";
+                return Redirect($"{FrontendLoginUrl()}#mfaRecovery=success&grant={Uri.EscapeDataString(recovery.RecoveryGrant)}");
             }
 
             // A provider ID is required for every sign-in. Email and its verification
@@ -531,6 +579,62 @@ namespace MentorshipHub.API.Presentation.Controllers
             var response = await _authService.ResendEmailOtp(request);
 
             return Ok(response);
+        }
+
+        [HttpPost("mfa-recovery/external/{provider}/begin")]
+        [AllowAnonymous]
+        [EnableRateLimiting("otp-ip")]
+        public IActionResult BeginExternalMfaRecovery(string provider, [FromBody] MfaAccountRecoveryExternalStartRequest request)
+        {
+            var scheme = ResolveExternalProvider(provider);
+            if (scheme == null || request == null || string.IsNullOrWhiteSpace(request.EmailProof) ||
+                request.EmailProof.Length > 128)
+                return BadRequest(new { isSuccess = false, message = "The recovery verification is invalid or expired." });
+
+            var ticket = new MfaRecoveryOAuthTicket
+            {
+                Provider = scheme,
+                EmailProof = request.EmailProof.Trim(),
+                ExpiresAtUtc = DateTime.UtcNow.AddMinutes(5)
+            };
+            var protectedTicket = _mfaRecoveryTicketProtector.Protect(JsonSerializer.Serialize(ticket));
+            Response.Cookies.Append(MfaRecoveryTicketCookieName, protectedTicket, MfaRecoveryTicketCookieOptions());
+            return Ok(new { isSuccess = true, message = "Continue to your linked provider to verify account ownership." });
+        }
+
+        [HttpGet("mfa-recovery/{provider}-login")]
+        [AllowAnonymous]
+        public IActionResult ExternalMfaRecoveryLogin(string provider)
+        {
+            var scheme = ResolveExternalProvider(provider);
+            var protectedTicket = Request.Cookies[MfaRecoveryTicketCookieName];
+            ClearMfaRecoveryTicketCookie();
+            if (scheme == null || string.IsNullOrWhiteSpace(protectedTicket))
+                return ExternalLoginFailure("The recovery verification has expired. Start account recovery again.");
+
+            MfaRecoveryOAuthTicket? ticket;
+            try
+            {
+                ticket = JsonSerializer.Deserialize<MfaRecoveryOAuthTicket>(
+                    _mfaRecoveryTicketProtector.Unprotect(protectedTicket));
+            }
+            catch
+            {
+                ticket = null;
+            }
+
+            if (ticket == null || ticket.ExpiresAtUtc <= DateTime.UtcNow ||
+                !string.Equals(ticket.Provider, scheme, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(ticket.EmailProof))
+                return ExternalLoginFailure("The recovery verification has expired. Start account recovery again.");
+
+            var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider = scheme });
+            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
+            properties.Items[MfaRecoveryIntentKey] = "recover";
+            properties.Items[MfaRecoveryEmailProofKey] = ticket.EmailProof;
+            properties.Items["deviceId"] = string.Empty;
+            properties.Items["deviceName"] = string.Empty;
+            return Challenge(properties, scheme);
         }
 
         [HttpPost("mfa-recovery/request")]
