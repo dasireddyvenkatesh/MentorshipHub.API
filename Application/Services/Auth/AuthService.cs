@@ -333,11 +333,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     item.ConsumedAt = now;
 
                 otp = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+                var challengeId = Guid.NewGuid();
                 challenge = new MfaLoginChallenge
                 {
+                    Id = challengeId,
                     UserId = user.Id,
                     Purpose = MfaRecoveryOtpPurpose,
-                    TokenHash = HashMfaRecoveryOtp(user.Id, otp),
+                    TokenHash = HashMfaRecoveryOtp(user.Id, otp, challengeId),
                     ExpiresAt = now.AddMinutes(10),
                     AttemptCount = 0,
                     ConsumedAt = null
@@ -373,7 +375,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             const string genericFailure = "The recovery verification could not be completed. Request a new code and try again.";
             if (request == null || string.IsNullOrWhiteSpace(request.Email) ||
                 string.IsNullOrWhiteSpace(request.OtpCode) ||
-                !System.Text.RegularExpressions.Regex.IsMatch(request.OtpCode, @"^\\d{6}$"))
+                !System.Text.RegularExpressions.Regex.IsMatch(request.OtpCode, @"^\d{6}$"))
                 return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = genericFailure };
 
             var email = request.Email.Trim().ToLowerInvariant();
@@ -409,7 +411,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
 
             var expected = Convert.FromHexString(challenge.TokenHash);
-            var supplied = Convert.FromHexString(HashMfaRecoveryOtp(user.Id, request.OtpCode));
+            var supplied = Convert.FromHexString(HashMfaRecoveryOtp(user.Id, request.OtpCode, challenge.Id));
             if (!CryptographicOperations.FixedTimeEquals(expected, supplied))
             {
                 challenge.AttemptCount++;
@@ -442,7 +444,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             };
         }
 
-        private string HashMfaRecoveryOtp(Guid userId, string otp)
+        private string HashMfaRecoveryOtp(Guid userId, string otp, Guid challengeId)
         {
             var jwtKey = _configuration["Jwt:Key"];
             if (string.IsNullOrWhiteSpace(jwtKey))
@@ -452,7 +454,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 Encoding.UTF8.GetBytes("XQARE.MfaRecoveryOtp.v1"));
             var hash = HMACSHA256.HashData(
                 purposeKey,
-                Encoding.UTF8.GetBytes(userId.ToString("N") + ":" + otp));
+                Encoding.UTF8.GetBytes(userId.ToString("N") + ":" + challengeId.ToString("N") + ":" + otp));
             return Convert.ToHexString(hash);
         }
 
