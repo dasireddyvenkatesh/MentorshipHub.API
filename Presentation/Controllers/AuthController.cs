@@ -688,6 +688,14 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!HasTrustedBrowserOrigin())
                 return StatusCode(StatusCodes.Status403Forbidden, new { message = "Untrusted request origin." });
 
+            // Revoke the session identified by the current access token as well as
+            // the refresh-cookie session. This covers browsers where the refresh cookie
+            // is missing or stale while a still-valid access token identifies the session.
+            var userId = CurrentUserId();
+            var sessionId = CurrentSessionId();
+            if (userId.HasValue && sessionId.HasValue)
+                await _userSessionService.RevokeSessionAsync(userId.Value, sessionId.Value);
+
             var refreshToken = Request.Cookies[RefreshTokenCookieName];
             if (!string.IsNullOrWhiteSpace(refreshToken))
                 await _userSessionService.RevokeAsync(refreshToken);
