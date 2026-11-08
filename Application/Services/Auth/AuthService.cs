@@ -331,7 +331,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
                 var outstanding = await _db.MfaLoginChallenges
                     .Where(x => x.UserId == user.Id &&
-                                x.Purpose == MfaRecoveryOtpPurpose &&
+                                (x.Purpose == MfaRecoveryOtpPurpose ||
+                                 x.Purpose == MfaRecoveryGrantPurpose) &&
                                 x.ConsumedAt == null)
                     .ToListAsync();
                 foreach (var item in outstanding)
