@@ -25,5 +25,7 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task<MentorshipHub.API.Application.DTO.Common.ResponseDTO> LinkExternalLoginAsync(Guid userId, Guid sessionId, ExternalLoginRequest request);
         Task<ResponseDTO> DisconnectExternalLoginAsync(Guid userId, Guid sessionId, string provider, string currentPassword);
         Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request);
+        Task<string?> CreateExternalLoginExchangeChallengeAsync(string refreshToken);
+        Task<LoginResponse> ExchangeExternalLoginChallengeAsync(string code);
     }
 }
