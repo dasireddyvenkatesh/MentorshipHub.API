@@ -318,7 +318,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     x.UserId == user.Id &&
                     x.Purpose == MfaRecoveryOtpPurpose &&
                     x.CreatedAt >= now.AddHours(-1));
-                if (recentRequests >= 3)
+                var lastRequest = await _db.MfaLoginChallenges
+                    .Where(x => x.UserId == user.Id && x.Purpose == MfaRecoveryOtpPurpose)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .Select(x => (DateTime?)x.CreatedAt)
+                    .FirstOrDefaultAsync();
+                if (recentRequests >= 3 || (lastRequest.HasValue && lastRequest.Value > now.AddSeconds(-60)))
                 {
                     await transaction.CommitAsync();
                     return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
