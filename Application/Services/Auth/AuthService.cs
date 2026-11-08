@@ -1576,13 +1576,28 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var grantHash = _jwt.Hash(request.RecoveryGrant.Trim());
             await using var transaction = await _db.Database.BeginTransactionAsync();
             var now = DateTime.UtcNow;
+            // Read the owner first, then take the per-user advisory lock before locking
+            // the grant row. This keeps lock ordering consistent with OTP request/verify.
+            var grantOwner = await _db.MfaLoginChallenges.AsNoTracking()
+                .Where(x => x.TokenHash == grantHash && x.Purpose == MfaRecoveryGrantPurpose)
+                .Select(x => new { x.UserId, x.ExpiresAt, x.ConsumedAt })
+                .FirstOrDefaultAsync();
+            if (grantOwner == null || grantOwner.ConsumedAt.HasValue || grantOwner.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = failure };
+            }
+
+            var lockKey = "mfa-recovery:" + grantOwner.UserId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
             var grant = await _db.MfaLoginChallenges
                 .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
                     WHERE ""TokenHash"" = {grantHash} AND ""Purpose"" = {MfaRecoveryGrantPurpose}
                     FOR UPDATE")
                 .FirstOrDefaultAsync();
-
-            if (grant == null || grant.ConsumedAt.HasValue || grant.ExpiresAt <= now)
+            if (grant == null || grant.UserId != grantOwner.UserId ||
+                grant.ConsumedAt.HasValue || grant.ExpiresAt <= now)
             {
                 await transaction.RollbackAsync();
                 return new TotpEnrollmentStartResponse { IsSuccess = false, Message = failure };
@@ -1598,10 +1613,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new TotpEnrollmentStartResponse { IsSuccess = false, Message = failure };
             }
 
-            var lockKey = "mfa-recovery:" + user.Id.ToString("N");
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
-
+            // The per-user recovery lock is already held for this transaction.
             // The existing authenticator remains active until the replacement code is confirmed.
             var response = await _totp.StartEnrollmentAsync(user.Id, user.Email, allowReplace: true);
             if (!response.IsSuccess)
@@ -1625,13 +1637,26 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var grantHash = _jwt.Hash(request.RecoveryGrant.Trim());
             await using var transaction = await _db.Database.BeginTransactionAsync();
             var now = DateTime.UtcNow;
+            var grantOwner = await _db.MfaLoginChallenges.AsNoTracking()
+                .Where(x => x.TokenHash == grantHash && x.Purpose == MfaRecoveryGrantPurpose)
+                .Select(x => new { x.UserId, x.ExpiresAt, x.ConsumedAt })
+                .FirstOrDefaultAsync();
+            if (grantOwner == null || grantOwner.ConsumedAt.HasValue || grantOwner.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = failure };
+            }
+
+            var lockKey = "mfa-recovery:" + grantOwner.UserId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
             var grant = await _db.MfaLoginChallenges
                 .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
                     WHERE ""TokenHash"" = {grantHash} AND ""Purpose"" = {MfaRecoveryGrantPurpose}
                     FOR UPDATE")
                 .FirstOrDefaultAsync();
-
-            if (grant == null || grant.ConsumedAt.HasValue || grant.ExpiresAt <= now)
+            if (grant == null || grant.UserId != grantOwner.UserId ||
+                grant.ConsumedAt.HasValue || grant.ExpiresAt <= now)
             {
                 await transaction.RollbackAsync();
                 return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = failure };
@@ -1647,10 +1672,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = failure };
             }
 
-            var lockKey = "mfa-recovery:" + user.Id.ToString("N");
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
-
+            // The per-user recovery lock is already held for this transaction.
             // ConfirmEnrollmentAsync joins this transaction. The active secret and old
             // recovery codes are changed only after the new authenticator code is valid.
             var response = await _totp.ConfirmEnrollmentAsync(user.Id, request.Code);
