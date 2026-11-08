@@ -8,6 +8,7 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task<LoginResponse> LoginAsync(LoginRequest request);
         Task<ResponseDTO> RequestMfaAccountRecoveryAsync(MfaAccountRecoveryRequest request);
         Task<MfaAccountRecoveryVerifyResponse> VerifyMfaAccountRecoveryOtpAsync(MfaAccountRecoveryVerifyRequest request);
+        Task<MfaAccountRecoveryVerifyResponse> CompleteExternalMfaRecoveryAsync(string emailProof, ExternalLoginRequest externalIdentity);
         Task<TotpEnrollmentStartResponse> StartMfaRecoveryEnrollmentAsync(MfaAccountRecoveryEnrollmentStartRequest request);
         Task<TotpEnrollmentConfirmResponse> CompleteMfaAccountRecoveryAsync(MfaAccountRecoveryCompleteRequest request);
         Task<ResponseDTO> RequestPasswordResetAsync(ForgotPasswordRequest request);
