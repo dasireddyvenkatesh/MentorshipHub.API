@@ -284,24 +284,40 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         private const string MfaRecoveryOtpPurpose = "mfa-recovery-otp";
         private const string MfaRecoveryGrantPurpose = "mfa-recovery-grant";
+        private const string MfaRecoveryEmailProofPurpose = "mfa-recovery-email-proof";
         private const string MfaRecoveryGenericMessage = "If the account is eligible, a recovery verification code will be sent to its registered email address.";
 
         public async Task<ResponseDTO> RequestMfaAccountRecoveryAsync(MfaAccountRecoveryRequest request)
         {
-            if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            if (request == null || string.IsNullOrWhiteSpace(request.Email))
                 return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
 
             var email = request.Email.Trim().ToLowerInvariant();
             if (!new EmailAddressAttribute().IsValid(email))
                 return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
 
-            // Reuse the normal password validator so recovery observes the same
-            // account lockout, failed-attempt counters and password-hash upgrades.
-            var validation = await ValidatePasswordWithLockoutAsync(email, request.Password);
-            var user = validation.User;
-            if (!validation.IsValid || user == null || !user.IsActive || !user.IsEmailConfirmed ||
-                user.SecuritySetting?.MfaEnabled != true ||
-                !await _totp.IsEnabledAsync(user.Id))
+            User? user;
+            if (!string.IsNullOrWhiteSpace(request.Password))
+            {
+                // Password-based recovery reuses the normal lockout-protected validator.
+                var validation = await ValidatePasswordWithLockoutAsync(email, request.Password);
+                user = validation.User;
+                if (!validation.IsValid)
+                    return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
+            }
+            else
+            {
+                // Passwordless accounts must prove control of a previously linked
+                // external identity after email verification; email alone is insufficient.
+                user = await _db.Users.Include(x => x.SecuritySetting)
+                    .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
+                if (user?.PasswordHash != null ||
+                    !await _db.ExternalLogins.AnyAsync(x => x.UserId == user!.Id))
+                    return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
+            }
+
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed ||
+                user.SecuritySetting?.MfaEnabled != true || !await _totp.IsEnabledAsync(user.Id))
                 return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
 
             var now = DateTime.UtcNow;
@@ -332,7 +348,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 var outstanding = await _db.MfaLoginChallenges
                     .Where(x => x.UserId == user.Id &&
                                 (x.Purpose == MfaRecoveryOtpPurpose ||
-                                 x.Purpose == MfaRecoveryGrantPurpose) &&
+                                 x.Purpose == MfaRecoveryGrantPurpose ||
+                                 x.Purpose == MfaRecoveryEmailProofPurpose) &&
                                 x.ConsumedAt == null)
                     .ToListAsync();
                 foreach (var item in outstanding)
@@ -429,12 +446,19 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
 
             challenge.ConsumedAt = now;
-            var grant = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            var isPasswordless = string.IsNullOrWhiteSpace(user.PasswordHash);
+            if (isPasswordless && !await _db.ExternalLogins.AnyAsync(x => x.UserId == user.Id))
+            {
+                await transaction.CommitAsync();
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = genericFailure };
+            }
+
+            var proof = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
             _db.MfaLoginChallenges.Add(new MfaLoginChallenge
             {
                 UserId = user.Id,
-                Purpose = MfaRecoveryGrantPurpose,
-                TokenHash = _jwt.Hash(grant),
+                Purpose = isPasswordless ? MfaRecoveryEmailProofPurpose : MfaRecoveryGrantPurpose,
+                TokenHash = _jwt.Hash(proof),
                 ExpiresAt = now.AddMinutes(10),
                 AttemptCount = 0,
                 ConsumedAt = null
@@ -445,7 +469,82 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new MfaAccountRecoveryVerifyResponse
             {
                 IsSuccess = true,
-                Message = "Recovery verification succeeded. Continue with authenticator replacement.",
+                Message = isPasswordless
+                    ? "Email verified. Continue by signing in with an external account already connected to this XQARE account."
+                    : "Recovery verification succeeded. Continue with authenticator replacement.",
+                RecoveryGrant = isPasswordless ? null : proof,
+                EmailProof = isPasswordless ? proof : null,
+                RequiresExternalVerification = isPasswordless
+            };
+        }
+
+        public async Task<MfaAccountRecoveryVerifyResponse> CompleteExternalMfaRecoveryAsync(
+            string emailProof, ExternalLoginRequest externalIdentity)
+        {
+            const string failure = "The recovery verification could not be completed. Start account recovery again.";
+            if (string.IsNullOrWhiteSpace(emailProof) || emailProof.Length > 128 ||
+                externalIdentity == null || string.IsNullOrWhiteSpace(externalIdentity.Provider) ||
+                string.IsNullOrWhiteSpace(externalIdentity.ProviderId) || !externalIdentity.EmailVerified)
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = failure };
+
+            var provider = new[] { "Google", "GitHub", "LinkedIn", "Twitter" }
+                .FirstOrDefault(x => string.Equals(x, externalIdentity.Provider, StringComparison.OrdinalIgnoreCase));
+            if (provider == null || externalIdentity.ProviderId.Length > 256)
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = failure };
+
+            var proofHash = _jwt.Hash(emailProof.Trim());
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var now = DateTime.UtcNow;
+            var proofOwner = await _db.MfaLoginChallenges.AsNoTracking()
+                .Where(x => x.TokenHash == proofHash && x.Purpose == MfaRecoveryEmailProofPurpose)
+                .Select(x => new { x.UserId, x.ExpiresAt, x.ConsumedAt })
+                .FirstOrDefaultAsync();
+            if (proofOwner == null || proofOwner.ConsumedAt.HasValue || proofOwner.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = failure };
+            }
+
+            var lockKey = "mfa-recovery:" + proofOwner.UserId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+            var proof = await _db.MfaLoginChallenges
+                .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
+                    WHERE ""TokenHash"" = {proofHash} AND ""Purpose"" = {MfaRecoveryEmailProofPurpose}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
+            if (proof == null || proof.UserId != proofOwner.UserId || proof.ConsumedAt.HasValue || proof.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = failure };
+            }
+
+            // The provider ID must already be linked to this exact XQARE user.
+            // Never auto-link identities or trust an email match as provider proof.
+            var linked = await _db.ExternalLogins.AnyAsync(x =>
+                x.UserId == proof.UserId && x.Provider == provider &&
+                x.ProviderUserId == externalIdentity.ProviderId);
+            var user = await _db.Users.Include(x => x.SecuritySetting)
+                .FirstOrDefaultAsync(x => x.Id == proof.UserId);
+            if (!linked || user == null || !user.IsActive || !user.IsEmailConfirmed ||
+                user.SecuritySetting?.MfaEnabled != true || !await _totp.IsEnabledAsync(user.Id))
+            {
+                await transaction.RollbackAsync();
+                return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = failure };
+            }
+
+            proof.ConsumedAt = now;
+            var grant = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            _db.MfaLoginChallenges.Add(new MfaLoginChallenge
+            {
+                UserId = user.Id, Purpose = MfaRecoveryGrantPurpose, TokenHash = _jwt.Hash(grant),
+                ExpiresAt = now.AddMinutes(10), AttemptCount = 0, ConsumedAt = null
+            });
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return new MfaAccountRecoveryVerifyResponse
+            {
+                IsSuccess = true,
+                Message = "External identity verified. Continue with authenticator replacement.",
                 RecoveryGrant = grant
             };
         }
