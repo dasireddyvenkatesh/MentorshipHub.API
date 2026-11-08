@@ -68,7 +68,19 @@ namespace MentorshipHub.API.Presentation.Controllers
         }
 
         private void SetRefreshTokenCookie(string token)
-            => Response.Cookies.Append(RefreshTokenCookieName, token, RefreshTokenCookieOptions());
+        {
+            // Remove the previous unpartitioned cookie during migration so the
+            // browser cannot send duplicate refresh-cookie names.
+            Response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/api/auth"
+            });
+
+            Response.Cookies.Append(RefreshTokenCookieName, token, RefreshTokenCookieOptions());
+        }
 
         private static CookieOptions MfaChallengeCookieOptions() => new()
         {
@@ -96,7 +108,9 @@ namespace MentorshipHub.API.Presentation.Controllers
                 Path = "/api/auth"
             };
 
-            // Match the partition attribute and scope when expiring the cookie.
+            // Expire both the legacy unpartitioned cookie and the new CHIPS cookie.
+            Response.Cookies.Delete(RefreshTokenCookieName, options);
+
             options.Extensions.Add("Partitioned");
             Response.Cookies.Delete(RefreshTokenCookieName, options);
         }
