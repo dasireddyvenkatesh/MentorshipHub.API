@@ -1129,10 +1129,63 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             var now = DateTime.UtcNow;
             if (challenge == null ||
-                !string.Equals(challenge.Purpose, "external-login", StringComparison.Ordinal) ||
+                (challenge.Purpose != "external-login" && challenge.Purpose != "external-mfa") ||
                 challenge.ConsumedAt.HasValue ||
-                challenge.ExpiresAt <= now ||
-                !Guid.TryParse(challenge.DeviceId, out var sessionId))
+                challenge.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new LoginResponse { IsSuccess = false, Message = "The sign-in exchange has expired. Please sign in again." };
+            }
+
+            if (string.Equals(challenge.Purpose, "external-mfa", StringComparison.Ordinal))
+            {
+                var mfaToken = challenge.DeviceId;
+                if (string.IsNullOrWhiteSpace(mfaToken))
+                {
+                    challenge.ConsumedAt = now;
+                    await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return new LoginResponse { IsSuccess = false, Message = "The verification request has expired. Please sign in again." };
+                }
+
+                var mfaHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(mfaToken)));
+                var mfaChallenge = await _db.MfaLoginChallenges
+                    .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
+                        WHERE ""TokenHash"" = {mfaHash}
+                        FOR UPDATE")
+                    .FirstOrDefaultAsync();
+                var mfaUser = await _db.Users.FindAsync(challenge.UserId);
+
+                if (mfaChallenge == null ||
+                    mfaChallenge.UserId != challenge.UserId ||
+                    mfaChallenge.Purpose != "totp" ||
+                    mfaChallenge.ConsumedAt.HasValue ||
+                    mfaChallenge.ExpiresAt <= now ||
+                    mfaUser == null ||
+                    !mfaUser.IsActive ||
+                    !mfaUser.IsEmailConfirmed)
+                {
+                    challenge.ConsumedAt = now;
+                    await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return new LoginResponse { IsSuccess = false, Message = "The verification request has expired. Please sign in again." };
+                }
+
+                challenge.ConsumedAt = now;
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return new LoginResponse
+                {
+                    IsSuccess = true,
+                    RequiresMfa = true,
+                    MfaChallengeToken = mfaToken,
+                    UserId = mfaUser.Id,
+                    Email = mfaUser.Email,
+                    Message = "Enter the six-digit code from your authenticator app."
+                };
+            }
+
+            if (!Guid.TryParse(challenge.DeviceId, out var sessionId))
             {
                 await transaction.RollbackAsync();
                 return new LoginResponse { IsSuccess = false, Message = "The sign-in exchange has expired. Please sign in again." };
