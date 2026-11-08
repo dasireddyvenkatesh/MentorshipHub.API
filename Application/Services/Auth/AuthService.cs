@@ -484,7 +484,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             const string failure = "The recovery verification could not be completed. Start account recovery again.";
             if (string.IsNullOrWhiteSpace(emailProof) || emailProof.Length > 128 ||
                 externalIdentity == null || string.IsNullOrWhiteSpace(externalIdentity.Provider) ||
-                string.IsNullOrWhiteSpace(externalIdentity.ProviderId) || !externalIdentity.EmailVerified)
+                string.IsNullOrWhiteSpace(externalIdentity.ProviderId))
                 return new MfaAccountRecoveryVerifyResponse { IsSuccess = false, Message = failure };
 
             var provider = new[] { "Google", "GitHub", "LinkedIn", "Twitter" }
