@@ -26,6 +26,8 @@ namespace MentorshipHub.API.Presentation.Controllers
         private const string ExternalLinkIntentKey = "xqare:auth-intent";
         private const string ExternalLinkUserIdKey = "xqare:link-user-id";
         private const string ExternalLinkSessionIdKey = "xqare:link-session-id";
+        private const string ExternalLinkNonceKey = "xqare:link-nonce";
+        private const string ExternalLinkProviderKey = "xqare:link-provider";
         private readonly IAuthService _authService;
         private readonly IUserSessionService _userSessionService;
         private readonly IOAuthUserMapper _oauthUserMapper;
@@ -296,7 +298,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         // protected, HttpOnly browser ticket bound to its current XQARE user/session.
         [Authorize]
         [HttpPost("external-links/{provider}/begin")]
-        public IActionResult BeginExternalLink(string provider)
+        public async Task<IActionResult> BeginExternalLink(string provider)
         {
             var scheme = ResolveExternalProvider(provider);
             var userId = CurrentUserId();
@@ -308,13 +310,17 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!userId.HasValue || !sessionId.HasValue)
                 return Unauthorized();
 
+            var nonce = await _authService.CreateExternalLinkChallengeAsync(userId.Value, sessionId.Value);
+            if (string.IsNullOrWhiteSpace(nonce))
+                return Unauthorized(new { isSuccess = false, message = "Your XQARE session is no longer active. Sign in again before connecting an account." });
+
             var ticket = new ExternalLinkTicket
             {
                 UserId = userId.Value,
                 SessionId = sessionId.Value,
                 Provider = scheme,
                 ExpiresAtUtc = DateTime.UtcNow.AddMinutes(5),
-                Nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16))
+                Nonce = nonce
             };
 
             var protectedTicket = _externalLinkTicketProtector.Protect(JsonSerializer.Serialize(ticket));
@@ -366,6 +372,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             properties.Items[ExternalLinkIntentKey] = "link";
             properties.Items[ExternalLinkUserIdKey] = ticket.UserId.ToString("D");
             properties.Items[ExternalLinkSessionIdKey] = ticket.SessionId.ToString("D");
+            properties.Items[ExternalLinkNonceKey] = ticket.Nonce;
+            properties.Items[ExternalLinkProviderKey] = scheme;
             properties.Items["deviceId"] = string.Empty;
             properties.Items["deviceName"] = string.Empty;
 
@@ -400,13 +408,30 @@ namespace MentorshipHub.API.Presentation.Controllers
                 var linkSessionIdValue = result.Properties.Items.TryGetValue(ExternalLinkSessionIdKey, out var storedSessionId)
                     ? storedSessionId
                     : null;
+                var linkNonce = result.Properties.Items.TryGetValue(ExternalLinkNonceKey, out var storedNonce)
+                    ? storedNonce
+                    : null;
+                var expectedProvider = result.Properties.Items.TryGetValue(ExternalLinkProviderKey, out var storedProvider)
+                    ? storedProvider
+                    : null;
+                var callbackProvider = ResolveExternalProvider(provider);
 
                 if (!Guid.TryParse(linkUserIdValue, out var linkUserId) ||
                     !Guid.TryParse(linkSessionIdValue, out var linkSessionId) ||
+                    string.IsNullOrWhiteSpace(linkNonce) ||
+                    string.IsNullOrWhiteSpace(expectedProvider) ||
+                    !string.Equals(callbackProvider, expectedProvider, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(oauthUser.Provider, expectedProvider, StringComparison.OrdinalIgnoreCase) ||
                     string.IsNullOrWhiteSpace(oauthUser.ProviderId))
                 {
                     return ExternalLinkResult(false, "The account-link request could not be validated. Start again from Settings.");
                 }
+
+                // Consume the server-side nonce before performing the account link.
+                // The database row lock makes concurrent/replayed callbacks single-use.
+                var challengeConsumed = await _authService.ConsumeExternalLinkChallengeAsync(linkUserId, linkNonce);
+                if (!challengeConsumed)
+                    return ExternalLinkResult(false, "The account-link request has already been used or has expired. Start again from Settings.");
 
                 var linkResponse = await _authService.LinkExternalLoginAsync(linkUserId, linkSessionId, oauthUser);
                 return ExternalLinkResult(linkResponse.IsSuccess, linkResponse.Message);
