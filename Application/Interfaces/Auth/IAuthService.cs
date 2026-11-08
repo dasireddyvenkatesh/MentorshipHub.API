@@ -20,6 +20,8 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task<LoginResponse> VerifyRegisterEmailOtp(VerifyRegisterEmailOtpRequest request);
         Task<RegisterResponse> RegisterAsync(RegisterRequest request);
         Task<ConnectedAccountsResponse> GetConnectedAccountsAsync(Guid userId);
+        Task<string?> CreateExternalLinkChallengeAsync(Guid userId, Guid sessionId);
+        Task<bool> ConsumeExternalLinkChallengeAsync(Guid userId, string nonce);
         Task<MentorshipHub.API.Application.DTO.Common.ResponseDTO> LinkExternalLoginAsync(Guid userId, Guid sessionId, ExternalLoginRequest request);
         Task<ResponseDTO> DisconnectExternalLoginAsync(Guid userId, Guid sessionId, string provider, string currentPassword);
         Task<LoginResponse> ExternalLoginAsync(ExternalLoginRequest request);
