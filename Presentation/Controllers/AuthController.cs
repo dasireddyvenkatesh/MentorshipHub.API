@@ -551,6 +551,24 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(response);
         }
 
+        [HttpPost("mfa-recovery/start-enrollment")]
+        [AllowAnonymous]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> StartMfaRecoveryEnrollment([FromBody] MfaAccountRecoveryEnrollmentStartRequest request)
+        {
+            var response = await _authService.StartMfaRecoveryEnrollmentAsync(request);
+            return Ok(response);
+        }
+
+        [HttpPost("mfa-recovery/complete")]
+        [AllowAnonymous]
+        [EnableRateLimiting("otp-ip")]
+        public async Task<IActionResult> CompleteMfaAccountRecovery([FromBody] MfaAccountRecoveryCompleteRequest request)
+        {
+            var response = await _authService.CompleteMfaAccountRecoveryAsync(request);
+            return Ok(response);
+        }
+
         [HttpPost("verify-mfa-challenge")]
         [AllowAnonymous]
         [EnableRateLimiting("otp-ip")]
