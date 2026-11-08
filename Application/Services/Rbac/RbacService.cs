@@ -27,20 +27,37 @@ namespace MentorshipHub.API.Application.Services.Rbac
 
         public async Task<IReadOnlyList<RoleResponse>> GetRolesAsync()
         {
-            return await _db.Roles.AsNoTracking()
-                .OrderBy(x => x.IsSystem ? 0 : 1)
-                .ThenBy(x => x.Name)
-                .Select(x => new RoleResponse
-                {
-                    Id = x.Id,
-                    Name = x.Name,
-                    Code = x.Code,
-                    IsSystem = x.IsSystem,
-                    AssignedUsers = x.UserRoles.Count,
-                    PermissionCount = x.RolePermissions.Count
-                })
-                .ToListAsync();
+            return await ProjectRoleList(_db.Roles.AsNoTracking()).ToListAsync();
         }
+
+        public async Task<IReadOnlyList<RoleResponse>> GetAssignableRolesAsync(Guid actorUserId)
+        {
+            var isSuperAdmin = await IsActiveSuperAdminAsync(actorUserId);
+            var query = _db.Roles.AsNoTracking()
+                .Where(role => role.Code != SuperAdminCode);
+
+            if (!isSuperAdmin)
+            {
+                query = query.Where(role => !role.RolePermissions.Any(rolePermission =>
+                    SuperAdminDelegatedPermissionCodes.Contains(rolePermission.Permission.Code)));
+            }
+
+            return await ProjectRoleList(query).ToListAsync();
+        }
+
+        private static IQueryable<RoleResponse> ProjectRoleList(IQueryable<Role> roles)
+            => roles
+                .OrderBy(role => role.IsSystem ? 0 : 1)
+                .ThenBy(role => role.Name)
+                .Select(role => new RoleResponse
+                {
+                    Id = role.Id,
+                    Name = role.Name,
+                    Code = role.Code,
+                    IsSystem = role.IsSystem,
+                    AssignedUsers = role.UserRoles.Count,
+                    PermissionCount = role.RolePermissions.Count
+                });
 
         public async Task<IReadOnlyList<PermissionResponse>> GetPermissionsAsync()
         {
@@ -300,15 +317,17 @@ namespace MentorshipHub.API.Application.Services.Rbac
             if (permissions.Count != requestedCodes.Length)
                 return Fail("UNKNOWN_PERMISSION", "One or more permission codes are not in the permission catalogue.");
 
-            if (requestedCodes.Any(IsSuperAdminDelegatedPermission) &&
-                !await IsActiveSuperAdminAsync(actorUserId))
-                return Fail("SUPERADMIN_REQUIRED",
-                    "Only an active Super Admin can delegate role-permission or role-assignment management.");
-
-            var currentCodes = role.RolePermissions
+            var currentCodeSet = role.RolePermissions
                 .Select(x => x.Permission.Code)
-                .OrderBy(x => x)
-                .ToArray();
+                .ToHashSet(StringComparer.Ordinal);
+            var addsDelegatedPermission = requestedCodes.Any(code =>
+                IsSuperAdminDelegatedPermission(code) && !currentCodeSet.Contains(code));
+
+            if (addsDelegatedPermission && !await IsActiveSuperAdminAsync(actorUserId))
+                return Fail("SUPERADMIN_REQUIRED",
+                    "Only an active Super Admin can add role-permission or role-assignment management to a custom role.");
+
+            var currentCodes = currentCodeSet.OrderBy(x => x).ToArray();
             var newCodes = requestedCodes.OrderBy(x => x).ToArray();
 
             if (currentCodes.SequenceEqual(newCodes, StringComparer.Ordinal))
