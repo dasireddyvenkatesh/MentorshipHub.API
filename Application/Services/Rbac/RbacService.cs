@@ -11,6 +11,11 @@ namespace MentorshipHub.API.Application.Services.Rbac
     public sealed class RbacService : IRbacService
     {
         private const string SuperAdminCode = "SUPERADMIN";
+        private static readonly string[] SuperAdminDelegatedPermissionCodes =
+        [
+            "RBAC_PERMISSIONS_MANAGE",
+            "RBAC_ASSIGNMENTS_MANAGE"
+        ];
         private readonly AppDbContext _db;
         private readonly IRbacAuditService _audit;
 
@@ -117,6 +122,11 @@ namespace MentorshipHub.API.Application.Services.Rbac
             if (permissions.Count != requestedCodes.Length)
                 return Fail("UNKNOWN_PERMISSION", "One or more permission codes are not in the permission catalogue.");
 
+            if (requestedCodes.Any(IsSuperAdminDelegatedPermission) &&
+                !await IsActiveSuperAdminAsync(actorUserId))
+                return Fail("SUPERADMIN_REQUIRED",
+                    "Only an active Super Admin can delegate role-permission or role-assignment management.");
+
             var role = new Role { Name = name, Code = code, IsSystem = false };
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -210,6 +220,16 @@ namespace MentorshipHub.API.Application.Services.Rbac
                 return Fail("USER_DISABLED", "A role cannot be assigned to a disabled account.");
             if (role.Code == SuperAdminCode)
                 return Fail("SUPERADMIN_PROTECTED", "SUPERADMIN assignments must be managed through the protected recovery process.");
+
+            var containsDelegatedPermissions = await _db.RolePermissions
+                .AsNoTracking()
+                .AnyAsync(x => x.RoleId == roleId &&
+                    SuperAdminDelegatedPermissionCodes.Contains(x.Permission.Code));
+
+            if (containsDelegatedPermissions && !await IsActiveSuperAdminAsync(actorUserId))
+                return Fail("SUPERADMIN_REQUIRED",
+                    "Only an active Super Admin can assign a role that grants role-permission or role-assignment management.");
+
             if (await _db.UserRoles.AnyAsync(x => x.UserId == userId && x.RoleId == roleId))
                 return Fail("ALREADY_ASSIGNED", "The user already has this role.");
 
@@ -280,6 +300,11 @@ namespace MentorshipHub.API.Application.Services.Rbac
             if (permissions.Count != requestedCodes.Length)
                 return Fail("UNKNOWN_PERMISSION", "One or more permission codes are not in the permission catalogue.");
 
+            if (requestedCodes.Any(IsSuperAdminDelegatedPermission) &&
+                !await IsActiveSuperAdminAsync(actorUserId))
+                return Fail("SUPERADMIN_REQUIRED",
+                    "Only an active Super Admin can delegate role-permission or role-assignment management.");
+
             var currentCodes = role.RolePermissions
                 .Select(x => x.Permission.Code)
                 .OrderBy(x => x)
@@ -306,6 +331,15 @@ namespace MentorshipHub.API.Application.Services.Rbac
 
             return Ok("Role permissions were updated.");
         }
+
+        private static bool IsSuperAdminDelegatedPermission(string permissionCode)
+            => SuperAdminDelegatedPermissionCodes.Contains(permissionCode, StringComparer.Ordinal);
+
+        private async Task<bool> IsActiveSuperAdminAsync(Guid userId)
+            => await _db.UserRoles.AsNoTracking().AnyAsync(x =>
+                x.UserId == userId &&
+                x.User.IsActive &&
+                x.Role.Code == SuperAdminCode);
 
         private static RbacOperationResponse Ok(string message)
             => new() { IsSuccess = true, Message = message };
