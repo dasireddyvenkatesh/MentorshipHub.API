@@ -531,6 +531,15 @@ namespace MentorshipHub.API.Application.Classes.Auth
         {
             var now = DateTime.UtcNow;
 
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            // Serialize challenge creation for this account and cap concurrent,
+            // unexpired OAuth link attempts so repeated starts cannot grow the table
+            // without bound during the five-minute validity window.
+            var lockKey = "external-link:" + userId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
             var eligibleUser = await _db.Users.AsNoTracking().AnyAsync(x =>
                 x.Id == userId && x.IsActive && x.IsEmailConfirmed);
             var activeSession = await _db.UserSessions.AsNoTracking().AnyAsync(x =>
@@ -541,7 +550,22 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x.ExpiresAt > now);
 
             if (!eligibleUser || !activeSession)
+            {
+                await transaction.RollbackAsync();
                 return null;
+            }
+
+            var outstandingCount = await _db.MfaLoginChallenges.CountAsync(x =>
+                x.UserId == userId &&
+                x.Purpose == "external-link" &&
+                x.ConsumedAt == null &&
+                x.ExpiresAt > now);
+
+            if (outstandingCount >= 5)
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
 
             // The raw nonce is returned only to the controller so it can be placed
             // inside the existing Data-Protected, HttpOnly OAuth linking ticket.
@@ -560,6 +584,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             });
 
             await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
             return nonce;
         }
 
