@@ -15,5 +15,7 @@ namespace MentorshipHub.API.Application.DTO.Auth
     public sealed class MfaAccountRecoveryVerifyResponse : ResponseDTO
     {
         public string? RecoveryGrant { get; set; }
+        public string? EmailProof { get; set; }
+        public bool RequiresExternalVerification { get; set; }
     }
 }
