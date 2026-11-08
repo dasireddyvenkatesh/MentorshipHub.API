@@ -1102,7 +1102,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 UserId = mfaChallenge.UserId,
                 TokenHash = codeHash,
                 Purpose = "external-mfa",
-                DeviceId = mfaChallengeToken,
+                DeviceId = mfaChallenge.Id.ToString("D"),
                 ExpiresAt = mfaChallenge.ExpiresAt < now.AddMinutes(2)
                     ? mfaChallenge.ExpiresAt
                     : now.AddMinutes(2),
@@ -1140,8 +1140,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             if (string.Equals(challenge.Purpose, "external-mfa", StringComparison.Ordinal))
             {
-                var mfaToken = challenge.DeviceId;
-                if (string.IsNullOrWhiteSpace(mfaToken))
+                if (!Guid.TryParse(challenge.DeviceId, out var mfaChallengeId))
                 {
                     challenge.ConsumedAt = now;
                     await _db.SaveChangesAsync();
@@ -1149,10 +1148,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     return new LoginResponse { IsSuccess = false, Message = "The verification request has expired. Please sign in again." };
                 }
 
-                var mfaHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(mfaToken)));
                 var mfaChallenge = await _db.MfaLoginChallenges
                     .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
-                        WHERE ""TokenHash"" = {mfaHash}
+                        WHERE ""Id"" = {mfaChallengeId}
                         FOR UPDATE")
                     .FirstOrDefaultAsync();
                 var mfaUser = await _db.Users.FindAsync(challenge.UserId);
@@ -1172,6 +1170,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     return new LoginResponse { IsSuccess = false, Message = "The verification request has expired. Please sign in again." };
                 }
 
+                // Rotate the MFA challenge token during exchange. Only its hash
+                // remains in the database; the new raw token is returned to the
+                // controller solely so it can be placed in the HttpOnly cookie.
+                var mfaToken = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+                mfaChallenge.TokenHash = Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(mfaToken)));
                 challenge.ConsumedAt = now;
                 await _db.SaveChangesAsync();
                 await transaction.CommitAsync();
