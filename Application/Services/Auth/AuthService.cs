@@ -1567,6 +1567,131 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return response;
         }
 
+        public async Task<TotpEnrollmentStartResponse> StartMfaRecoveryEnrollmentAsync(MfaAccountRecoveryEnrollmentStartRequest request)
+        {
+            const string failure = "The recovery session is invalid or has expired. Request account recovery again.";
+            if (request == null || string.IsNullOrWhiteSpace(request.RecoveryGrant) || request.RecoveryGrant.Length > 128)
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = failure };
+
+            var grantHash = _jwt.Hash(request.RecoveryGrant.Trim());
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var now = DateTime.UtcNow;
+            var grant = await _db.MfaLoginChallenges
+                .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
+                    WHERE ""TokenHash"" = {grantHash} AND ""Purpose"" = {MfaRecoveryGrantPurpose}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            if (grant == null || grant.ConsumedAt.HasValue || grant.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = failure };
+            }
+
+            var user = await _db.Users
+                .Include(x => x.SecuritySetting)
+                .FirstOrDefaultAsync(x => x.Id == grant.UserId);
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed ||
+                user.SecuritySetting?.MfaEnabled != true || !await _totp.IsEnabledAsync(user.Id))
+            {
+                await transaction.RollbackAsync();
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = failure };
+            }
+
+            var lockKey = "mfa-recovery:" + user.Id.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
+            // The existing authenticator remains active until the replacement code is confirmed.
+            var response = await _totp.StartEnrollmentAsync(user.Id, user.Email, allowReplace: true);
+            if (!response.IsSuccess)
+            {
+                await transaction.RollbackAsync();
+                return response;
+            }
+
+            await transaction.CommitAsync();
+            return response;
+        }
+
+        public async Task<TotpEnrollmentConfirmResponse> CompleteMfaAccountRecoveryAsync(MfaAccountRecoveryCompleteRequest request)
+        {
+            const string failure = "The recovery session is invalid or has expired. Request account recovery again.";
+            if (request == null || string.IsNullOrWhiteSpace(request.RecoveryGrant) ||
+                request.RecoveryGrant.Length > 128 || string.IsNullOrWhiteSpace(request.Code) ||
+                !System.Text.RegularExpressions.Regex.IsMatch(request.Code, @"^\\d{6}$"))
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Enter a valid recovery session and six-digit authenticator code." };
+
+            var grantHash = _jwt.Hash(request.RecoveryGrant.Trim());
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            var now = DateTime.UtcNow;
+            var grant = await _db.MfaLoginChallenges
+                .FromSqlInterpolated($@"SELECT * FROM ""MfaLoginChallenges""
+                    WHERE ""TokenHash"" = {grantHash} AND ""Purpose"" = {MfaRecoveryGrantPurpose}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            if (grant == null || grant.ConsumedAt.HasValue || grant.ExpiresAt <= now)
+            {
+                await transaction.RollbackAsync();
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = failure };
+            }
+
+            var user = await _db.Users
+                .Include(x => x.SecuritySetting)
+                .FirstOrDefaultAsync(x => x.Id == grant.UserId);
+            if (user == null || !user.IsActive || !user.IsEmailConfirmed ||
+                user.SecuritySetting?.MfaEnabled != true || !await _totp.IsEnabledAsync(user.Id))
+            {
+                await transaction.RollbackAsync();
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = failure };
+            }
+
+            var lockKey = "mfa-recovery:" + user.Id.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
+            // ConfirmEnrollmentAsync joins this transaction. The active secret and old
+            // recovery codes are changed only after the new authenticator code is valid.
+            var response = await _totp.ConfirmEnrollmentAsync(user.Id, request.Code);
+            if (!response.IsSuccess)
+            {
+                // Persist the TOTP failed-attempt counter while leaving the grant available
+                // for a retry until its own expiry or the TOTP lockout is reached.
+                await transaction.CommitAsync();
+                return response;
+            }
+
+            grant.ConsumedAt = now;
+            await _db.UserSessions
+                .Where(x => x.UserId == user.Id && !x.IsRevoked)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.IsRevoked, true)
+                    .SetProperty(x => x.RevokedAt, now)
+                    .SetProperty(x => x.LastActivityAt, now));
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            try
+            {
+                var firstName = await _db.UserProfiles
+                    .Where(x => x.UserId == user.Id)
+                    .Select(x => x.FirstName)
+                    .FirstOrDefaultAsync();
+                var template = _emailTemplateService.BuildMfaAccountRecoveryCompleted(
+                    string.IsNullOrWhiteSpace(firstName) ? user.Username : firstName);
+                await _emailService.SendEmail(user.Email, template.subject, template.body);
+            }
+            catch
+            {
+                // Recovery is already committed. A notification failure must not undo it.
+            }
+
+            response.Message = "Authenticator recovery completed. All existing sessions were signed out. Save your new recovery codes now; they are shown only once.";
+            return response;
+        }
+
         public async Task<TotpEnrollmentStartResponse> StartTotpEnrollmentAsync(Guid userId, TotpEnrollmentStartRequest request)
         {
             var user = await _db.Users.FindAsync(userId);
