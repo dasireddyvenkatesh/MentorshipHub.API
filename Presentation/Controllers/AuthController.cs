@@ -84,16 +84,36 @@ namespace MentorshipHub.API.Presentation.Controllers
             Response.Cookies.Append(RefreshTokenCookieName, token, RefreshTokenCookieOptions());
         }
 
-        private static CookieOptions MfaChallengeCookieOptions() => new()
+        private static CookieOptions MfaChallengeCookieOptions()
         {
-            HttpOnly = true, Secure = true, SameSite = SameSiteMode.None,
-            Path = "/api/auth", MaxAge = TimeSpan.FromMinutes(5)
-        };
+            var options = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/api/auth",
+                MaxAge = TimeSpan.FromMinutes(5)
+            };
+            options.Extensions.Add("Partitioned");
+            return options;
+        }
+
         private void SetMfaChallengeCookie(string token)
             => Response.Cookies.Append(MfaChallengeCookieName, token, MfaChallengeCookieOptions());
+
         private void ClearMfaChallengeCookie()
-            => Response.Cookies.Delete(MfaChallengeCookieName, new CookieOptions
-            { HttpOnly = true, Secure = true, SameSite = SameSiteMode.None, Path = "/api/auth" });
+        {
+            var options = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Path = "/api/auth"
+            };
+            Response.Cookies.Delete(MfaChallengeCookieName, options);
+            options.Extensions.Add("Partitioned");
+            Response.Cookies.Delete(MfaChallengeCookieName, options);
+        }
         private Guid? CurrentUserId()
             => Guid.TryParse(User.FindFirst("uid")?.Value, out var userId) ? userId : null;
 
