@@ -115,6 +115,10 @@ namespace MentorshipHub.API.Application.Services.Admin
                     IsEmailConfirmed = x.IsEmailConfirmed,
                     CreatedAt = x.CreatedAt,
                     LastLoginAt = x.LastLoginAt,
+                    IsLockedOut = x.SecuritySetting != null && x.SecuritySetting.LockoutEnd.HasValue && x.SecuritySetting.LockoutEnd.Value > DateTime.UtcNow,
+                    LockoutEndUtc = x.SecuritySetting != null ? x.SecuritySetting.LockoutEnd : null,
+                    FailedLoginCount = x.SecuritySetting != null ? x.SecuritySetting.AccessFailedCount : 0,
+                    LockoutLevel = x.SecuritySetting != null ? x.SecuritySetting.LockoutLevel : 0,
                     Roles = x.UserRoles
                         .Select(userRole => userRole.Role.Name)
                         .OrderBy(role => role)
@@ -156,7 +160,8 @@ namespace MentorshipHub.API.Application.Services.Admin
         {
             var user = await _db.Users
                 .AsNoTracking()
-                .Include(x => x.Profile)
+                 .Include(x => x.Profile)
+                .Include(x => x.SecuritySetting)
                 .Include(x => x.UserRoles)
                     .ThenInclude(x => x.Role)
                 .FirstOrDefaultAsync(x => x.Id == userId);
@@ -194,6 +199,10 @@ namespace MentorshipHub.API.Application.Services.Admin
                 IsEmailConfirmed = user.IsEmailConfirmed,
                 CreatedAt = user.CreatedAt,
                 LastLoginAt = user.LastLoginAt,
+                IsLockedOut = user.SecuritySetting?.LockoutEnd > now,
+                LockoutEndUtc = user.SecuritySetting?.LockoutEnd,
+                FailedLoginCount = user.SecuritySetting?.AccessFailedCount ?? 0,
+                LockoutLevel = user.SecuritySetting?.LockoutLevel ?? 0,
                 ActiveSessionCount = activeSessions,
                 TotalSessionCount = totalSessions,
                 Roles = roleAssignments
