@@ -358,6 +358,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         // protected, HttpOnly browser ticket bound to its current XQARE user/session.
         [Authorize]
         [HttpPost("external-links/{provider}/begin")]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> BeginExternalLink(string provider)
         {
             var scheme = ResolveExternalProvider(provider);
@@ -767,6 +768,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("sessions/{sessionId:guid}/revoke")]
         [Authorize]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> RevokeSession(Guid sessionId)
         {
             var userId = CurrentUserId();
@@ -802,6 +804,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("sessions/revoke-others")]
         [Authorize]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> RevokeOtherSessions()
         {
             var userId = CurrentUserId();
