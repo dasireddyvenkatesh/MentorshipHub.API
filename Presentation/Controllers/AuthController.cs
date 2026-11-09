@@ -1,4 +1,5 @@
-﻿using AspNet.Security.OAuth.GitHub;
+﻿using MentorshipHub.API.Constants.Messages;
+using AspNet.Security.OAuth.GitHub;
 using AspNet.Security.OAuth.LinkedIn;
 using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.Interfaces.Auth;
@@ -695,7 +696,7 @@ namespace MentorshipHub.API.Presentation.Controllers
                 : request!.ChallengeToken;
 
             if (string.IsNullOrWhiteSpace(token))
-                return Unauthorized(new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired. Please sign in again." });
+                return Unauthorized(new LoginResponse { IsSuccess = false, Message = SessionMessages.MfaChallengeExpired });
 
             if (usesCookieChallenge && !HasTrustedBrowserOrigin(requireSource: true))
                 return StatusCode(StatusCodes.Status403Forbidden,
@@ -752,7 +753,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(new ActiveSessionsResponse
             {
                 IsSuccess = true,
-                Message = "Active sessions retrieved.",
+                Message = SessionMessages.ActiveSessionsRetrieved,
                 Sessions = sessions.Select(x => new ActiveSessionDto
                 {
                     SessionId = x.Id,
@@ -781,7 +782,7 @@ namespace MentorshipHub.API.Presentation.Controllers
                 return NotFound(new SessionActionResponse
                 {
                     IsSuccess = false,
-                    Message = "The session was not found or is already revoked."
+                    Message = SessionMessages.SessionNotFoundOrRevoked
                 });
 
             var isCurrentSession = sessionId == currentSessionId.Value;
@@ -795,8 +796,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             {
                 IsSuccess = true,
                 Message = isCurrentSession
-                    ? "This session has been revoked."
-                    : "The selected session has been revoked.",
+                    ? SessionMessages.CurrentSessionRevoked
+                    : SessionMessages.SelectedSessionRevoked,
                 AffectedSessions = 1,
                 IsCurrentSession = isCurrentSession
             });
@@ -817,8 +818,8 @@ namespace MentorshipHub.API.Presentation.Controllers
             {
                 IsSuccess = true,
                 Message = revokedCount == 0
-                    ? "There are no other active sessions."
-                    : $"{revokedCount} other session(s) have been signed out.",
+                    ? SessionMessages.NoOtherActiveSessions
+                    : string.Format(SessionMessages.OtherSessionsSignedOut, revokedCount),
                 AffectedSessions = revokedCount,
                 IsCurrentSession = false
             });
@@ -942,7 +943,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             }
 
             if (string.IsNullOrWhiteSpace(result.RefreshToken))
-                return Unauthorized(new { isSuccess = false, message = "The sign-in exchange has expired. Please sign in again." });
+                return Unauthorized(new { isSuccess = false, message = SessionMessages.SignInExchangeExpired });
 
             SetRefreshTokenCookie(result.RefreshToken);
             result.RefreshToken = string.Empty;
@@ -961,7 +962,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             var refreshToken = Request.Cookies[RefreshTokenCookieName];
             if (string.IsNullOrWhiteSpace(refreshToken))
             {
-                return Unauthorized(new { isSuccess = false, message = "Refresh token missing. Please sign in again." });
+                return Unauthorized(new { isSuccess = false, message = SessionMessages.RefreshTokenMissingSignIn });
             }
 
             var result = await _authService.RefreshAsync(refreshToken);
