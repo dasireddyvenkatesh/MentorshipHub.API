@@ -341,8 +341,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpGet("{provider}-login")]
-        [EnableRateLimiting("auth-login-ip")]
-        public IActionResult ExternalLogin(string provider, string deviceId, string deviceName)
+                public IActionResult ExternalLogin(string provider, string deviceId, string deviceName)
         {
             var scheme = ResolveExternalProvider(provider);
             if (scheme == null)
@@ -399,8 +398,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         // authenticated begin request. The linking ticket is HttpOnly and Data-Protected.
         [AllowAnonymous]
         [HttpGet("{provider}-link")]
-        [EnableRateLimiting("auth-security-ip")]
-        public IActionResult ExternalLink(string provider)
+                public IActionResult ExternalLink(string provider)
         {
             var scheme = ResolveExternalProvider(provider);
             var protectedTicket = Request.Cookies[ExternalLinkTicketCookieName];
@@ -607,8 +605,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpGet("mfa-recovery/{provider}-login")]
         [AllowAnonymous]
-        [EnableRateLimiting("auth-recovery-ip")]
-        public IActionResult ExternalMfaRecoveryLogin(string provider)
+                public IActionResult ExternalMfaRecoveryLogin(string provider)
         {
             var scheme = ResolveExternalProvider(provider);
             var protectedTicket = Request.Cookies[MfaRecoveryTicketCookieName];
