@@ -1287,7 +1287,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = "Account is inactive."
+                    Message = OtpMessages.AccountInactive
                 };
             }
 
@@ -1558,7 +1558,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new EmailOtpResponse
                 {
                     IsSuccess = true,
-                    Message = "If this address has a pending registration, a verification code can be sent."
+                    Message = OtpMessages.PendingRegistrationGeneric
                 };
             }
 
@@ -1574,7 +1574,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new EmailOtpResponse
                 {
                     IsSuccess = true,
-                    Message = "If this address has a pending registration, a verification code can be sent."
+                    Message = OtpMessages.PendingRegistrationGeneric
                 };
             }
 
@@ -1868,11 +1868,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<LoginResponse> VerifyRegisterEmailOtp(VerifyRegisterEmailOtpRequest request)
         {
             if (request == null)
-                return new LoginResponse { IsSuccess = false, Message = "Registration verification details are required." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.RegistrationDetailsRequired };
 
             var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.OtpCode))
-                return new LoginResponse { IsSuccess = false, Message = "Email and verification code are required." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.EmailAndCodeRequired };
 
             // Serialize OTP consumption and OTP regeneration for this email.
             // GenerateEmailVerificationOtp uses the same PostgreSQL advisory lock.
@@ -1884,10 +1884,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (otp == null)
-                return new LoginResponse { IsSuccess = false, Message = "OTP not found. Request a new verification code." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.NotFound };
 
             if (otp.IsUsed)
-                return new LoginResponse { IsSuccess = false, Message = "This OTP has already been used. Request a new verification code." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.AlreadyUsed };
 
             if (otp.LockedUntil.HasValue)
             {
@@ -1899,7 +1899,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     {
                         IsSuccess = false,
                         RetryAfterSeconds = retryAfterSeconds,
-                        Message = $"Too many incorrect attempts. Try again in {remainingMinutes} minutes."
+                        Message = string.Format(OtpMessages.LockedForMinutes, remainingMinutes)
                     };
                 }
 
@@ -1908,7 +1908,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
 
             if (otp.ExpiresAt <= now)
-                return new LoginResponse { IsSuccess = false, Message = "OTP expired. Request a new verification code." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.Expired };
 
             if (!_hasher.Verify(otp.CodeHash, request.OtpCode))
             {
@@ -1924,13 +1924,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     {
                         IsSuccess = false,
                         RetryAfterSeconds = 24 * 60 * 60,
-                        Message = "Too many incorrect attempts. Try again in 24 hours."
+                        Message = OtpMessages.LockedFor24Hours
                     };
                 }
 
                 await _db.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return new LoginResponse { IsSuccess = false, Message = $"Invalid OTP. {remainingAttempts} attempt(s) remaining." };
+                return new LoginResponse { IsSuccess = false, Message = string.Format(OtpMessages.InvalidAttemptsRemaining, remainingAttempts) };
             }
 
             var user = await _db.Users
@@ -1938,13 +1938,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 .FirstOrDefaultAsync(x => x.Email.ToLower() == email);
 
             if (user == null)
-                return new LoginResponse { IsSuccess = false, Message = "User not found." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.UserNotFound };
 
             if (!user.IsActive)
-                return new LoginResponse { IsSuccess = false, Message = "Account is inactive." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.AccountInactive };
 
             if (user.IsEmailConfirmed)
-                return new LoginResponse { IsSuccess = false, Message = "Email is already verified. Please sign in." };
+                return new LoginResponse { IsSuccess = false, Message = OtpMessages.EmailAlreadyVerified };
 
             // The OTP must be checked before password validation so malformed
             // password submissions cannot bypass the OTP attempt counter.
@@ -1977,7 +1977,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             };
 
             var sessionResponse = await CreateSession(user, loginRequest);
-            sessionResponse.Message = "Email verified successfully. " + sessionResponse.Message;
+            sessionResponse.Message = OtpMessages.EmailVerifiedPrefix + sessionResponse.Message;
             return sessionResponse;
         }
 
