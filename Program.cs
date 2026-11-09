@@ -357,7 +357,7 @@ builder.Services.AddRateLimiter(options =>
                 code = "rate_limit_exceeded",
                 policy = policyName,
                 retryAfterSeconds,
-                message = "Too many requests. Please wait before trying again."
+                message = CommonMessages.RateLimitExceeded
             },
             cancellationToken);
     };
