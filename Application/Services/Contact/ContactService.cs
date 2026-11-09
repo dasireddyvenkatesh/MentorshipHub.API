@@ -1,4 +1,5 @@
 ﻿using MentorshipHub.API.Application.DTO.ContactUs;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.Interfaces.Contact;
 using MentorshipHub.API.Application.Interfaces.Email;
 using System.Text;
@@ -26,14 +27,14 @@ namespace MentorshipHub.API.Application.Services.Contact
                 return new ContactUsResponse
                 {
                     IsSuccess = true,
-                    Message = "Your message has been sent successfully. We will get back to you shortly"
+                    Message = ContactMessages.Sent
                 };
             }
 
             return new ContactUsResponse
             {
                 IsSuccess = false,
-                Message = "Can you please try again after sometime"
+                Message = ContactMessages.SendFailed
             };
         }
 
