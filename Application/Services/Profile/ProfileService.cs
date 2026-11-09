@@ -1,4 +1,5 @@
 using MentorshipHub.API.Application.DTO.Profile;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.Interfaces.Profile;
 using MentorshipHub.API.Enities;
 using MentorshipHub.API.Infrastructure.EntityModels.Profile;
@@ -37,7 +38,7 @@ namespace MentorshipHub.API.Application.Services.Profile
             var lastName = request.LastName.Trim();
 
             if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
-                throw new ArgumentException("First name and last name are required.");
+                throw new ArgumentException(ProfileMessages.NamesRequired);
 
             var profile = user.Profile;
             if (profile == null)
