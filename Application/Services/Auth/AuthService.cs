@@ -1,4 +1,5 @@
 ﻿using MentorshipHub.API.Constants.Messages;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.DTO.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
@@ -47,8 +48,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             _totp = totp;
         }
 
-        private const string PasswordResetGenericMessage =
-            "If an account with that email exists, we'll send a password reset link shortly.";
+        
 
         public async Task<ResponseDTO> RequestPasswordResetAsync(ForgotPasswordRequest request)
         {
@@ -56,7 +56,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
             {
                 // Keep the same outward response for malformed, unknown and known addresses.
-                return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+                return new ResponseDTO { IsSuccess = true, Message = PasswordMessages.ResetRequestGeneric };
             }
 
             string? rawToken = null;
@@ -75,7 +75,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 if (user == null)
                 {
                     await transaction.CommitAsync();
-                    return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+                    return new ResponseDTO { IsSuccess = true, Message = PasswordMessages.ResetRequestGeneric };
                 }
 
                 var now = DateTime.UtcNow;
@@ -86,7 +86,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 if (recentRequests >= 3)
                 {
                     await transaction.CommitAsync();
-                    return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+                    return new ResponseDTO { IsSuccess = true, Message = PasswordMessages.ResetRequestGeneric };
                 }
 
                 var outstandingTokens = await _db.PasswordResetTokens
@@ -129,7 +129,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     // Never construct a reset link from an untrusted Host header or
                     // an unvalidated environment URL.
                     await InvalidatePasswordResetTokenAsync(resetToken!.Id);
-                    return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+                    return new ResponseDTO { IsSuccess = true, Message = PasswordMessages.ResetRequestGeneric };
                 }
 
                 var resetUri = new Uri(frontendUri, "/reset-password");
@@ -146,13 +146,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     await InvalidatePasswordResetTokenAsync(resetToken.Id);
             }
 
-            return new ResponseDTO { IsSuccess = true, Message = PasswordResetGenericMessage };
+            return new ResponseDTO { IsSuccess = true, Message = PasswordMessages.ResetRequestGeneric };
         }
 
         public async Task<ResponseDTO> ChangePasswordAsync(Guid userId, Guid currentSessionId, ChangePasswordRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.CurrentPassword))
-                return new ResponseDTO { IsSuccess = false, Message = "Enter your current password." };
+                return new ResponseDTO { IsSuccess = false, Message = PasswordMessages.CurrentPasswordRequired };
 
             var passwordValidation = ValidateRegistrationPassword(request.NewPassword, request.ConfirmPassword);
             if (passwordValidation != null)
@@ -168,14 +168,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "Password sign-in is not enabled for this account. Use the password recovery process to establish a password."
+                    Message = PasswordMessages.PasswordSignInNotEnabled
                 };
 
             if (!_hasher.Verify(user.PasswordHash, request.CurrentPassword))
-                return new ResponseDTO { IsSuccess = false, Message = "Your current password is incorrect." };
+                return new ResponseDTO { IsSuccess = false, Message = PasswordMessages.CurrentPasswordIncorrect };
 
             if (_hasher.Verify(user.PasswordHash, request.NewPassword!))
-                return new ResponseDTO { IsSuccess = false, Message = "Choose a new password that is different from your current password." };
+                return new ResponseDTO { IsSuccess = false, Message = PasswordMessages.NewPasswordMustDiffer };
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
             user.PasswordHash = _hasher.Hash(request.NewPassword!);
@@ -189,7 +189,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new ResponseDTO
             {
                 IsSuccess = true,
-                Message = "Your password has been changed. Other active sessions have been signed out."
+                Message = PasswordMessages.ChangedOtherSessionsSignedOut
             };
         }
 
@@ -199,7 +199,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "This password reset link is invalid or has expired. Request a new one."
+                    Message = PasswordMessages.ResetLinkInvalidOrExpired
                 };
 
             var passwordValidation = ValidateRegistrationPassword(request.Password, request.ConfirmPassword);
@@ -223,7 +223,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "This password reset link is invalid or has expired. Request a new one."
+                    Message = PasswordMessages.ResetLinkInvalidOrExpired
                 };
             }
 
@@ -234,7 +234,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "This password reset link is invalid or has expired. Request a new one."
+                    Message = PasswordMessages.ResetLinkInvalidOrExpired
                 };
             }
 
@@ -262,7 +262,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new ResponseDTO
             {
                 IsSuccess = true,
-                Message = "Your password has been reset successfully. Please sign in again."
+                Message = PasswordMessages.ResetSuccessful
             };
         }
 
@@ -1094,7 +1094,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (string.IsNullOrWhiteSpace(currentPassword) ||
                 !_hasher.Verify(user.PasswordHash, currentPassword))
             {
-                return new ResponseDTO { IsSuccess = false, Message = "Your current password is incorrect." };
+                return new ResponseDTO { IsSuccess = false, Message = PasswordMessages.CurrentPasswordIncorrect };
             }
 
             var externalLogin = await _db.ExternalLogins.FirstOrDefaultAsync(x =>
@@ -2134,10 +2134,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private static string? ValidateRegistrationPassword(string? password, string? confirmPassword)
         {
             if (string.IsNullOrWhiteSpace(password))
-                return "Password is required.";
+                return PasswordMessages.PasswordRequired;
 
             if (password.Length > 128)
-                return "Password cannot exceed 128 characters.";
+                return PasswordMessages.PasswordTooLong;
 
             if (password.Length < 8 ||
                 !password.Any(char.IsUpper) ||
@@ -2145,11 +2145,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 !password.Any(char.IsDigit) ||
                 !password.Any(c => !char.IsLetterOrDigit(c)))
             {
-                return "Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.";
+                return PasswordMessages.PasswordPolicy;
             }
 
             if (!string.Equals(password, confirmPassword, StringComparison.Ordinal))
-                return "Passwords do not match.";
+                return PasswordMessages.PasswordsDoNotMatch;
 
             return null;
         }
