@@ -1,3 +1,4 @@
+﻿using MentorshipHub.API.Constants.Messages;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -38,7 +39,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new TotpEnrollmentStartResponse
                 {
                     IsSuccess = false,
-                    Message = "Authenticator enrollment is unavailable until a valid AES-256 TOTP encryption key is configured in the API application settings."
+                    Message = MfaMessages.EnrollmentUnavailable
                 };
             }
 
@@ -50,7 +51,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 .FirstOrDefaultAsync();
 
             if (credential?.IsEnabled == true && !allowReplace)
-                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = "An authenticator is already enabled." };
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = MfaMessages.AlreadyEnabled };
 
             var secret = Base32Encode(RandomNumberGenerator.GetBytes(20));
             var now = DateTime.UtcNow;
@@ -82,7 +83,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var qrDataUri = "data:image/png;base64," + Convert.ToBase64String(qrBytes);
             return new TotpEnrollmentStartResponse
             {
-                IsSuccess = true, Message = "Scan the QR code with your authenticator app, then enter the current six-digit code to finish setup.",
+                IsSuccess = true, Message = MfaMessages.ScanQrToFinishSetup,
                 Secret = secret, ProvisioningUri = uri, QrCodeDataUri = qrDataUri
             };
         }
@@ -90,7 +91,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<TotpEnrollmentConfirmResponse> ConfirmEnrollmentAsync(Guid userId, string code)
         {
             if (!IsSixDigitCode(code))
-                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Enter the six-digit code from your authenticator app." };
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.EnterSixDigitCode };
 
             await using var transaction = await BeginTransactionIfNeededAsync();
             var lockKey = "totp:" + userId.ToString("N");
@@ -102,9 +103,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var now = DateTime.UtcNow;
             if (credential?.PendingEncryptedSecret == null || credential.PendingEnrollmentExpiresAt == null ||
                 credential.PendingEnrollmentExpiresAt <= now)
-                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Your authenticator setup has expired. Start enrollment again." };
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.SetupExpired };
             if (credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now)
-                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Authenticator setup is temporarily locked. Try again later." };
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.SetupLocked };
 
             var pendingSecret = _protector.Unprotect(credential.PendingEncryptedSecret, userId);
             var matchedStep = FindMatchingTimeStep(pendingSecret, code, now);
@@ -117,8 +118,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 {
                     IsSuccess = false,
                     Message = credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now
-                        ? "Too many incorrect codes. Authenticator setup is temporarily locked."
-                        : "The authenticator code is incorrect. Check your device time and try again."
+                        ? MfaMessages.TooManySetupCodes
+                        : MfaMessages.IncorrectSetupCode
                 };
             }
 
@@ -142,7 +143,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (transaction != null) await transaction.CommitAsync();
             return new TotpEnrollmentConfirmResponse
             {
-                IsSuccess = true, Message = "Authenticator enabled successfully. Save these recovery codes now; they will only be displayed once.",
+                IsSuccess = true, Message = MfaMessages.EnabledSuccessfully,
                 RecoveryCodes = codes
             };
         }
@@ -154,7 +155,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x.UserId == userId && x.UsedAt == null && x.InvalidatedAt == null);
             return new TotpStatusResponse
             {
-                IsSuccess = true, Message = "Authenticator status retrieved.",
+                IsSuccess = true, Message = MfaMessages.StatusRetrieved,
                 IsEnabled = credential?.IsEnabled == true, CanEnroll = _protector.IsProtectionConfigured,
                 EnabledAt = credential?.EnabledAt,
                 RecoveryCodesRemaining = remaining
@@ -164,7 +165,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<TotpEnrollmentConfirmResponse> RegenerateRecoveryCodesAsync(Guid userId, string code)
         {
             if (!IsSixDigitCode(code))
-                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Enter the current six-digit authenticator code." };
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.EnterCurrentSixDigitCode };
             await using var transaction = await BeginTransactionIfNeededAsync();
             var verification = await VerifyCodeAndConsumeAsync(userId, code);
             if (!verification.IsValid)
@@ -174,23 +175,23 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (transaction != null) await transaction.CommitAsync();
             return new TotpEnrollmentConfirmResponse
             {
-                IsSuccess = true, Message = "New recovery codes generated. Previous unused codes are no longer valid.",
+                IsSuccess = true, Message = MfaMessages.RecoveryCodesRegenerated,
                 RecoveryCodes = codes
             };
         }
 
         public async Task<TotpVerificationResult> VerifyCodeAndConsumeAsync(Guid userId, string code)
         {
-            if (!IsSixDigitCode(code)) return new TotpVerificationResult(false, "Enter a valid six-digit authenticator code.");
+            if (!IsSixDigitCode(code)) return new TotpVerificationResult(false, MfaMessages.EnterValidSixDigitCode);
             await using var transaction = await BeginTransactionIfNeededAsync();
             var credential = await _db.TotpCredentials
                 .FromSqlInterpolated($@"SELECT * FROM ""TotpCredentials"" WHERE ""UserId"" = {userId} FOR UPDATE")
                 .FirstOrDefaultAsync();
             var now = DateTime.UtcNow;
             if (credential?.IsEnabled != true || string.IsNullOrWhiteSpace(credential.EncryptedSecret))
-                return new TotpVerificationResult(false, "Authenticator is not enabled for this account.");
+                return new TotpVerificationResult(false, MfaMessages.NotEnabled);
             if (credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now)
-                return new TotpVerificationResult(false, "Authenticator verification is temporarily locked. Try again later.");
+                return new TotpVerificationResult(false, MfaMessages.VerificationLocked);
 
             var encryptedSecret = credential.EncryptedSecret;
             var secret = _protector.Unprotect(encryptedSecret, userId);
@@ -206,8 +207,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 if (transaction != null) await transaction.CommitAsync();
                 return new TotpVerificationResult(false,
                     credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now
-                        ? "Too many incorrect codes. Authenticator verification is temporarily locked."
-                        : "The authenticator code is invalid or has already been used.");
+                        ? MfaMessages.TooManyVerificationCodes
+                        : MfaMessages.InvalidOrReusedCode);
             }
 
             if (needsReprotection)
@@ -219,7 +220,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             credential.LockoutEnd = null;
             await _db.SaveChangesAsync();
             if (transaction != null) await transaction.CommitAsync();
-            return new TotpVerificationResult(true, "Authenticator code verified.");
+            return new TotpVerificationResult(true, MfaMessages.CodeVerified);
         }
 
         public async Task<bool> ConsumeRecoveryCodeAsync(Guid userId, string code)
@@ -249,7 +250,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 .FromSqlInterpolated($@"SELECT * FROM ""TotpCredentials"" WHERE ""UserId"" = {userId} FOR UPDATE")
                 .FirstOrDefaultAsync();
             if (credential == null || !credential.IsEnabled)
-                throw new InvalidOperationException("Authenticator is not enabled.");
+                throw new InvalidOperationException(MfaMessages.NotEnabled);
 
             var now = DateTime.UtcNow;
             credential.IsEnabled = false;
