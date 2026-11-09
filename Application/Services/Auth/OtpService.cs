@@ -1,4 +1,5 @@
-﻿using MentorshipHub.API.Application.DTO.Auth;
+﻿using MentorshipHub.API.Constants.Messages;
+using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Email;
 using MentorshipHub.API.Enities;
@@ -53,7 +54,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     IsSuccess = false,
                     CanVerifyExistingOtp = false,
                     RetryAfterSeconds = GetRetryAfterSeconds(lockedUntil, now),
-                    Message = $"Too many failed attempts. Try again in {minutes} minutes."
+                    Message = string.Format(OtpMessages.TooManyFailedAttempts, minutes)
                 };
             }
 
@@ -68,7 +69,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     IsSuccess = false,
                     CanVerifyExistingOtp = canVerify,
                     RetryAfterSeconds = seconds,
-                    Message = $"Please wait {seconds} seconds before requesting another code."
+                    Message = string.Format(OtpMessages.ResendWaitSeconds, seconds)
                 };
             }
 
@@ -95,7 +96,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                         IsSuccess = false,
                         CanVerifyExistingOtp = CanVerifyExistingOtp(existing, now),
                         RetryAfterSeconds = seconds,
-                        Message = $"Hourly OTP limit reached. Please try again in {Math.Ceiling(seconds / 60d)} minutes."
+                        Message = string.Format(OtpMessages.HourlyLimitReached, Math.Ceiling(seconds / 60d))
                     };
                 }
 
@@ -108,7 +109,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                         IsSuccess = false,
                         CanVerifyExistingOtp = CanVerifyExistingOtp(existing, now),
                         RetryAfterSeconds = seconds,
-                        Message = $"Daily OTP limit reached. Please try again in {Math.Ceiling(seconds / 3600d)} hours."
+                        Message = string.Format(OtpMessages.DailyLimitReached, Math.Ceiling(seconds / 3600d))
                     };
                 }
 
@@ -182,7 +183,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     IsSuccess = false,
                     CanVerifyExistingOtp = false,
                     RetryAfterSeconds = 60,
-                    Message = "We couldn't send the verification email. Please try again in 60 seconds."
+                    Message = OtpMessages.EmailSendFailed
                 };
             }
 
@@ -191,7 +192,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 IsSuccess = true,
                 CanVerifyExistingOtp = true,
                 RetryAfterSeconds = 60,
-                Message = "Verification code sent to your email."
+                Message = OtpMessages.CodeSent
             };
         }
 
