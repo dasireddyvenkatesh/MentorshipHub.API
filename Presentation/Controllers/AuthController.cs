@@ -2,6 +2,7 @@
 using AspNet.Security.OAuth.GitHub;
 using AspNet.Security.OAuth.LinkedIn;
 using MentorshipHub.API.Application.DTO.Auth;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
@@ -346,7 +347,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             var scheme = ResolveExternalProvider(provider);
             if (scheme == null)
-                return BadRequest("Invalid authentication provider");
+                return BadRequest(ExternalLoginMessages.ProviderInvalidBare);
 
             var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider = scheme });
             var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
@@ -367,14 +368,14 @@ namespace MentorshipHub.API.Presentation.Controllers
             var sessionId = CurrentSessionId();
 
             if (scheme == null)
-                return BadRequest(new { isSuccess = false, message = "Invalid authentication provider." });
+                return BadRequest(new { isSuccess = false, message = ExternalLoginMessages.ProviderInvalid });
 
             if (!userId.HasValue || !sessionId.HasValue)
                 return Unauthorized();
 
             var nonce = await _authService.CreateExternalLinkChallengeAsync(userId.Value, sessionId.Value);
             if (string.IsNullOrWhiteSpace(nonce))
-                return Unauthorized(new { isSuccess = false, message = "Your XQARE session is no longer active. Sign in again before connecting an account." });
+                return Unauthorized(new { isSuccess = false, message = ExternalLoginMessages.SessionInactiveConnect });
 
             var ticket = new ExternalLinkTicket
             {
@@ -391,7 +392,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             return Ok(new MentorshipHub.API.Application.DTO.Common.ResponseDTO
             {
                 IsSuccess = true,
-                Message = "Continue to your provider to connect this account."
+                Message = ExternalLoginMessages.ContinueConnect
             });
         }
 
@@ -406,7 +407,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             ClearExternalLinkTicketCookie();
 
             if (scheme == null || string.IsNullOrWhiteSpace(protectedTicket))
-                return ExternalLinkResult(false, "The account-link request has expired. Try again from Settings.");
+                return ExternalLinkResult(false, ExternalLoginMessages.LinkExpired);
 
             ExternalLinkTicket? ticket;
             try
@@ -426,7 +427,7 @@ namespace MentorshipHub.API.Presentation.Controllers
                 !string.Equals(ticket.Provider, scheme, StringComparison.OrdinalIgnoreCase) ||
                 ticket.ExpiresAtUtc <= DateTime.UtcNow)
             {
-                return ExternalLinkResult(false, "The account-link request is invalid or has expired. Try again from Settings.");
+                return ExternalLinkResult(false, ExternalLoginMessages.LinkInvalidOrExpired);
             }
 
             var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider = scheme });
@@ -452,7 +453,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (!result.Succeeded || result.Principal == null || result.Properties == null)
             {
                 await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                return ExternalLoginFailure("External sign-in failed. Please try again.");
+                return ExternalLoginFailure(ExternalLoginMessages.SignInFailed);
             }
 
             var oauthUser = _oauthUserMapper.Map(provider, result.Principal, result.Properties);
@@ -492,14 +493,14 @@ namespace MentorshipHub.API.Presentation.Controllers
                     !string.Equals(oauthUser.Provider, expectedProvider, StringComparison.OrdinalIgnoreCase) ||
                     string.IsNullOrWhiteSpace(oauthUser.ProviderId))
                 {
-                    return ExternalLinkResult(false, "The account-link request could not be validated. Start again from Settings.");
+                    return ExternalLinkResult(false, ExternalLoginMessages.LinkCouldNotValidate);
                 }
 
                 // Consume the server-side nonce before performing the account link.
                 // The database row lock makes concurrent/replayed callbacks single-use.
                 var challengeConsumed = await _authService.ConsumeExternalLinkChallengeAsync(linkUserId, linkNonce);
                 if (!challengeConsumed)
-                    return ExternalLinkResult(false, "The account-link request has already been used or has expired. Start again from Settings.");
+                    return ExternalLinkResult(false, ExternalLoginMessages.LinkAlreadyUsed);
 
                 var linkResponse = await _authService.LinkExternalLoginAsync(linkUserId, linkSessionId, oauthUser);
                 return ExternalLinkResult(linkResponse.IsSuccess, linkResponse.Message);
@@ -508,11 +509,11 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (isMfaRecoveryIntent)
             {
                 if (string.IsNullOrWhiteSpace(recoveryEmailProof) || string.IsNullOrWhiteSpace(oauthUser.ProviderId))
-                    return ExternalLoginFailure("The recovery verification could not be completed. Start account recovery again.");
+                    return ExternalLoginFailure(ExternalLoginMessages.RecoveryCouldNotComplete);
 
                 var recovery = await _authService.CompleteExternalMfaRecoveryAsync(recoveryEmailProof, oauthUser);
                 if (!recovery.IsSuccess || string.IsNullOrWhiteSpace(recovery.RecoveryGrant))
-                    return ExternalLoginFailure(recovery.Message ?? "The linked provider could not be verified.");
+                    return ExternalLoginFailure(recovery.Message ?? ExternalLoginMessages.ProviderCouldNotBeVerified);
 
                 Response.Headers["Referrer-Policy"] = "no-referrer";
                 return Redirect($"{FrontendLoginUrl()}#mfaRecovery=success&grant={Uri.EscapeDataString(recovery.RecoveryGrant)}");
@@ -523,7 +524,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             // need the provider to return an email on every sign-in.
             if (string.IsNullOrWhiteSpace(oauthUser.ProviderId))
             {
-                return ExternalLoginFailure("The provider did not return a usable account identifier.");
+                return ExternalLoginFailure(ExternalLoginMessages.ProviderIdentifierMissing);
             }
 
             var response = await _authService.ExternalLoginAsync(oauthUser);
@@ -537,7 +538,7 @@ namespace MentorshipHub.API.Presentation.Controllers
                 if (string.IsNullOrWhiteSpace(exchangeCode))
                 {
                     await _userSessionService.RevokeAsync(response.RefreshToken);
-                    return ExternalLoginFailure("Sign-in could not be completed. Please try again.");
+                    return ExternalLoginFailure(ExternalLoginMessages.SignInCouldNotComplete);
                 }
 
                 Response.Headers["Referrer-Policy"] = "no-referrer";
@@ -552,7 +553,7 @@ namespace MentorshipHub.API.Presentation.Controllers
                 // partition through the same top-level frontend exchange flow.
                 var exchangeCode = await _authService.CreateExternalMfaLoginExchangeChallengeAsync(response.MfaChallengeToken);
                 if (string.IsNullOrWhiteSpace(exchangeCode))
-                    return ExternalLoginFailure("The verification request could not be completed. Please sign in again.");
+                    return ExternalLoginFailure(ExternalLoginMessages.VerificationCouldNotComplete);
 
                 Response.Headers["Referrer-Policy"] = "no-referrer";
                 var mfaMessage = Uri.EscapeDataString(
@@ -560,7 +561,7 @@ namespace MentorshipHub.API.Presentation.Controllers
                 return Redirect($"{FrontendLoginUrl()}#mfa=required&code={Uri.EscapeDataString(exchangeCode)}&message={mfaMessage}");
             }
 
-            return ExternalLoginFailure(response.Message ?? "External sign-in failed. Please try again.");
+            return ExternalLoginFailure(response.Message ?? ExternalLoginMessages.SignInFailed);
         }
 
         [AllowAnonymous]
@@ -591,7 +592,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             var scheme = ResolveExternalProvider(provider);
             if (scheme == null || request == null || string.IsNullOrWhiteSpace(request.EmailProof) ||
                 request.EmailProof.Length > 128)
-                return BadRequest(new { isSuccess = false, message = "The recovery verification is invalid or expired." });
+                return BadRequest(new { isSuccess = false, message = ExternalLoginMessages.RecoveryInvalidOrExpired });
 
             var ticket = new MfaRecoveryOAuthTicket
             {
@@ -601,7 +602,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             };
             var protectedTicket = _mfaRecoveryTicketProtector.Protect(JsonSerializer.Serialize(ticket));
             Response.Cookies.Append(MfaRecoveryTicketCookieName, protectedTicket, MfaRecoveryTicketCookieOptions());
-            return Ok(new { isSuccess = true, message = "Continue to your linked provider to verify account ownership." });
+            return Ok(new { isSuccess = true, message = ExternalLoginMessages.ContinueLinkedProvider });
         }
 
         [HttpGet("mfa-recovery/{provider}-login")]
@@ -612,7 +613,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             var protectedTicket = Request.Cookies[MfaRecoveryTicketCookieName];
             ClearMfaRecoveryTicketCookie();
             if (scheme == null || string.IsNullOrWhiteSpace(protectedTicket))
-                return ExternalLoginFailure("The recovery verification has expired. Start account recovery again.");
+                return ExternalLoginFailure(ExternalLoginMessages.RecoveryExpired);
 
             MfaRecoveryOAuthTicket? ticket;
             try
@@ -628,7 +629,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             if (ticket == null || ticket.ExpiresAtUtc <= DateTime.UtcNow ||
                 !string.Equals(ticket.Provider, scheme, StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(ticket.EmailProof))
-                return ExternalLoginFailure("The recovery verification has expired. Start account recovery again.");
+                return ExternalLoginFailure(ExternalLoginMessages.RecoveryExpired);
 
             var redirectUrl = Url.Action("ExternalResponse", "Auth", new { provider = scheme });
             var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
@@ -700,7 +701,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
             if (usesCookieChallenge && !HasTrustedBrowserOrigin(requireSource: true))
                 return StatusCode(StatusCodes.Status403Forbidden,
-                    new { isSuccess = false, message = "A trusted request origin is required for cookie-based MFA verification." });
+                    new { isSuccess = false, message = ExternalLoginMessages.TrustedCookieMfaOriginRequired });
 
             return await CompleteMfaVerificationAsync(request, token);
         }
@@ -846,7 +847,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             if (!HasTrustedBrowserOrigin())
                 return StatusCode(StatusCodes.Status403Forbidden,
-                    new { isSuccess = false, message = "Untrusted request origin." });
+                    new { isSuccess = false, message = ExternalLoginMessages.UntrustedOrigin });
 
             var userId = CurrentUserId();
             var currentSessionId = CurrentSessionId();
@@ -929,7 +930,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             if (!HasTrustedBrowserOrigin(requireSource: true))
                 return StatusCode(StatusCodes.Status403Forbidden,
-                    new { isSuccess = false, message = "A trusted request origin is required." });
+                    new { isSuccess = false, message = ExternalLoginMessages.TrustedOriginRequired });
 
             var result = await _authService.ExchangeExternalLoginChallengeAsync(code);
             if (!result.IsSuccess)
@@ -957,7 +958,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             // Refresh authentication is exclusively cookie-based, so a trusted
             // Origin or Referer is mandatory; missing source headers must not bypass CSRF validation.
             if (!HasTrustedBrowserOrigin(requireSource: true))
-                return StatusCode(StatusCodes.Status403Forbidden, new { isSuccess = false, message = "A trusted request origin is required." });
+                return StatusCode(StatusCodes.Status403Forbidden, new { isSuccess = false, message = ExternalLoginMessages.TrustedOriginRequired });
 
             var refreshToken = Request.Cookies[RefreshTokenCookieName];
             if (string.IsNullOrWhiteSpace(refreshToken))
@@ -988,7 +989,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             // Origin or Referer before revoking the cookie-backed session.
             var hasRefreshCookie = !string.IsNullOrWhiteSpace(Request.Cookies[RefreshTokenCookieName]);
             if (!HasTrustedBrowserOrigin(requireSource: hasRefreshCookie))
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "A trusted request origin is required." });
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ExternalLoginMessages.TrustedOriginRequired });
 
             // Revoke the session identified by the current access token as well as
             // the refresh-cookie session. This covers browsers where the refresh cookie
@@ -1005,7 +1006,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             // Always clear the cookie, even when the access token/session has already expired.
             ClearRefreshTokenCookie();
             ClearMfaChallengeCookie();
-            return Ok("Logged out successfully");
+            return Ok(ExternalLoginMessages.LogoutSuccess);
         }
 
 
