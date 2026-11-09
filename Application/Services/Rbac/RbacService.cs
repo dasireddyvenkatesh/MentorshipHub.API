@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MentorshipHub.API.Application.DTO.Rbac;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.Interfaces.Rbac;
 using MentorshipHub.API.Enities;
 using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
@@ -115,13 +116,13 @@ namespace MentorshipHub.API.Application.Services.Rbac
 
             if (name.Length is < 2 or > 80 ||
                 !Regex.IsMatch(code, @"^[A-Z][A-Z0-9_]{1,49}$"))
-                return Fail("INVALID_ROLE", "Provide a valid role name and code.");
+                return Fail("INVALID_ROLE", RbacMessages.InvalidRole);
 
             if (code == SuperAdminCode)
-                return Fail("RESERVED_ROLE", "The SUPERADMIN role code is reserved.");
+                return Fail("RESERVED_ROLE", RbacMessages.ReservedRole);
 
             if (await _db.Roles.AnyAsync(x => x.Code == code))
-                return Fail("ROLE_EXISTS", "A role with this code already exists.");
+                return Fail("ROLE_EXISTS", RbacMessages.RoleExists);
 
             var requestedCodes = (permissionCodes ?? Array.Empty<string>())
                 .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -130,19 +131,19 @@ namespace MentorshipHub.API.Application.Services.Rbac
                 .ToArray();
 
             if (requestedCodes.Length > 200)
-                return Fail("TOO_MANY_PERMISSIONS", "A role cannot have more than 200 permissions.");
+                return Fail("TOO_MANY_PERMISSIONS", RbacMessages.TooManyPermissions);
 
             var permissions = await _db.Permissions
                 .Where(x => requestedCodes.Contains(x.Code))
                 .ToListAsync();
 
             if (permissions.Count != requestedCodes.Length)
-                return Fail("UNKNOWN_PERMISSION", "One or more permission codes are not in the permission catalogue.");
+                return Fail("UNKNOWN_PERMISSION", RbacMessages.UnknownPermission);
 
             if (requestedCodes.Any(IsSuperAdminDelegatedPermission) &&
                 !await IsActiveSuperAdminAsync(actorUserId))
                 return Fail("SUPERADMIN_REQUIRED",
-                    "Only an active Super Admin can delegate role-permission or role-assignment management.");
+                    RbacMessages.CreateDelegationRequiresSuperAdmin);
 
             var role = new Role { Name = name, Code = code, IsSystem = false };
 
@@ -163,24 +164,24 @@ namespace MentorshipHub.API.Application.Services.Rbac
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok("The role and its permissions were created.");
+            return Ok(RbacMessages.RoleCreated);
         }
 
         public async Task<RbacOperationResponse> UpdateRoleAsync(Guid actorUserId, Guid roleId, string name)
         {
             name = name.Trim();
             if (name.Length is < 2 or > 80)
-                return Fail("INVALID_ROLE", "Role name must contain between 2 and 80 characters.");
+                return Fail("INVALID_ROLE", RbacMessages.RoleNameLength);
 
             var role = await _db.Roles.FirstOrDefaultAsync(x => x.Id == roleId);
             if (role == null)
-                return Fail("NOT_FOUND", "The role could not be found.");
+                return Fail("NOT_FOUND", RbacMessages.RoleNotFound);
             if (role.IsSystem || role.Code == SuperAdminCode)
-                return Fail("SYSTEM_ROLE_PROTECTED", "System roles cannot be renamed.");
+                return Fail("SYSTEM_ROLE_PROTECTED", RbacMessages.SystemRoleRenameProtected);
 
             var before = JsonSerializer.Serialize(new { role.Name, role.Code });
             if (role.Name == name)
-                return Ok("No changes were required.");
+                return Ok(RbacMessages.NoChangesRequired);
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
             role.Name = name;
@@ -190,7 +191,7 @@ namespace MentorshipHub.API.Application.Services.Rbac
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok("The role was updated.");
+            return Ok(RbacMessages.RoleUpdated);
         }
 
         public async Task<RbacOperationResponse> DeleteRoleAsync(Guid actorUserId, Guid roleId)
@@ -202,11 +203,11 @@ namespace MentorshipHub.API.Application.Services.Rbac
                 .FirstOrDefaultAsync(x => x.Id == roleId);
 
             if (role == null)
-                return Fail("NOT_FOUND", "The role could not be found.");
+                return Fail("NOT_FOUND", RbacMessages.RoleNotFound);
             if (role.IsSystem || role.Code == SuperAdminCode)
-                return Fail("SYSTEM_ROLE_PROTECTED", "System roles cannot be deleted.");
+                return Fail("SYSTEM_ROLE_PROTECTED", RbacMessages.SystemRoleDeleteProtected);
             if (role.UserRoles.Count != 0)
-                return Fail("ROLE_IN_USE", "Remove all users from this role before deleting it.");
+                return Fail("ROLE_IN_USE", RbacMessages.RoleInUse);
 
             var before = JsonSerializer.Serialize(new
             {
@@ -223,7 +224,7 @@ namespace MentorshipHub.API.Application.Services.Rbac
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok("The role was deleted.");
+            return Ok(RbacMessages.RoleDeleted);
         }
 
         public async Task<RbacOperationResponse> AssignRoleAsync(Guid actorUserId, Guid userId, Guid roleId)
@@ -232,11 +233,11 @@ namespace MentorshipHub.API.Application.Services.Rbac
             var role = await _db.Roles.AsNoTracking().FirstOrDefaultAsync(x => x.Id == roleId);
 
             if (user == null || role == null)
-                return Fail("NOT_FOUND", "The user or role could not be found.");
+                return Fail("NOT_FOUND", RbacMessages.UserOrRoleNotFound);
             if (!user.IsActive)
-                return Fail("USER_DISABLED", "A role cannot be assigned to a disabled account.");
+                return Fail("USER_DISABLED", RbacMessages.DisabledUserAssignment);
             if (role.Code == SuperAdminCode)
-                return Fail("SUPERADMIN_PROTECTED", "SUPERADMIN assignments must be managed through the protected recovery process.");
+                return Fail("SUPERADMIN_PROTECTED", RbacMessages.SuperAdminAssignmentProtected);
 
             var containsDelegatedPermissions = await _db.RolePermissions
                 .AsNoTracking()
@@ -245,10 +246,10 @@ namespace MentorshipHub.API.Application.Services.Rbac
 
             if (containsDelegatedPermissions && !await IsActiveSuperAdminAsync(actorUserId))
                 return Fail("SUPERADMIN_REQUIRED",
-                    "Only an active Super Admin can assign a role that grants role-permission or role-assignment management.");
+                    RbacMessages.AssignDelegatedRoleRequiresSuperAdmin);
 
             if (await _db.UserRoles.AnyAsync(x => x.UserId == userId && x.RoleId == roleId))
-                return Fail("ALREADY_ASSIGNED", "The user already has this role.");
+                return Fail("ALREADY_ASSIGNED", RbacMessages.AlreadyAssigned);
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
             _db.UserRoles.Add(new UserRole { UserId = userId, RoleId = roleId });
@@ -258,7 +259,7 @@ namespace MentorshipHub.API.Application.Services.Rbac
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok("The role was assigned to the user.");
+            return Ok(RbacMessages.RoleAssigned);
         }
 
         public async Task<RbacOperationResponse> RemoveRoleAsync(Guid actorUserId, Guid userId, Guid roleId)
@@ -268,9 +269,9 @@ namespace MentorshipHub.API.Application.Services.Rbac
                 .FirstOrDefaultAsync(x => x.UserId == userId && x.RoleId == roleId);
 
             if (assignment == null)
-                return Fail("NOT_FOUND", "The user-role assignment could not be found.");
+                return Fail("NOT_FOUND", RbacMessages.AssignmentNotFound);
             if (assignment.Role.Code == SuperAdminCode)
-                return Fail("SUPERADMIN_PROTECTED", "SUPERADMIN assignments cannot be removed through this endpoint.");
+                return Fail("SUPERADMIN_PROTECTED", RbacMessages.SuperAdminRemovalProtected);
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
             _db.UserRoles.Remove(assignment);
@@ -285,7 +286,7 @@ namespace MentorshipHub.API.Application.Services.Rbac
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok("The role was removed from the user.");
+            return Ok(RbacMessages.RoleRemoved);
         }
 
         public async Task<RbacOperationResponse> SetRolePermissionsAsync(
@@ -297,9 +298,9 @@ namespace MentorshipHub.API.Application.Services.Rbac
                 .FirstOrDefaultAsync(x => x.Id == roleId);
 
             if (role == null)
-                return Fail("NOT_FOUND", "The role could not be found.");
+                return Fail("NOT_FOUND", RbacMessages.RoleNotFound);
             if (role.IsSystem || role.Code == SuperAdminCode)
-                return Fail("SYSTEM_ROLE_PROTECTED", "System role permissions are protected.");
+                return Fail("SYSTEM_ROLE_PROTECTED", RbacMessages.SystemRolePermissionsProtected);
 
             var requestedCodes = permissionCodes
                 .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -308,14 +309,14 @@ namespace MentorshipHub.API.Application.Services.Rbac
                 .ToArray();
 
             if (requestedCodes.Length > 200)
-                return Fail("TOO_MANY_PERMISSIONS", "A role cannot have more than 200 permissions.");
+                return Fail("TOO_MANY_PERMISSIONS", RbacMessages.TooManyPermissions);
 
             var permissions = await _db.Permissions
                 .Where(x => requestedCodes.Contains(x.Code))
                 .ToListAsync();
 
             if (permissions.Count != requestedCodes.Length)
-                return Fail("UNKNOWN_PERMISSION", "One or more permission codes are not in the permission catalogue.");
+                return Fail("UNKNOWN_PERMISSION", RbacMessages.UnknownPermission);
 
             var currentCodeSet = role.RolePermissions
                 .Select(x => x.Permission.Code)
@@ -325,13 +326,13 @@ namespace MentorshipHub.API.Application.Services.Rbac
 
             if (addsDelegatedPermission && !await IsActiveSuperAdminAsync(actorUserId))
                 return Fail("SUPERADMIN_REQUIRED",
-                    "Only an active Super Admin can add role-permission or role-assignment management to a custom role.");
+                    RbacMessages.AddDelegatedPermissionRequiresSuperAdmin);
 
             var currentCodes = currentCodeSet.OrderBy(x => x).ToArray();
             var newCodes = requestedCodes.OrderBy(x => x).ToArray();
 
             if (currentCodes.SequenceEqual(newCodes, StringComparer.Ordinal))
-                return Ok("No permission changes were required.");
+                return Ok(RbacMessages.NoPermissionChangesRequired);
 
             var before = JsonSerializer.Serialize(new { PermissionCodes = currentCodes });
             await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -348,7 +349,7 @@ namespace MentorshipHub.API.Application.Services.Rbac
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return Ok("Role permissions were updated.");
+            return Ok(RbacMessages.PermissionsUpdated);
         }
 
         private static bool IsSuperAdminDelegatedPermission(string permissionCode)
