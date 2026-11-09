@@ -1008,7 +1008,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (identityOwner != null)
             {
                 return identityOwner.UserId == userId
-                    ? new ResponseDTO { IsSuccess = true, Message = $"{provider} is already connected to this account." }
+                    ? new ResponseDTO { IsSuccess = true, Message = string.Format(ExternalLoginMessages.ProviderAlreadyConnectedFormat, provider) }
                     : new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.ProviderAlreadyConnected };
             }
 
@@ -1016,7 +1016,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x.UserId == userId && x.Provider == provider);
 
             if (existingProvider)
-                return new ResponseDTO { IsSuccess = false, Message = $"A different {provider} account is already connected. Disconnect it before connecting another one." };
+                return new ResponseDTO { IsSuccess = false, Message = string.Format(ExternalLoginMessages.DifferentProviderAccountAlreadyConnectedFormat, provider) };
 
             _db.ExternalLogins.Add(new ExternalLogin
             {
@@ -1030,7 +1030,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             try
             {
                 await _db.SaveChangesAsync();
-                return new ResponseDTO { IsSuccess = true, Message = $"{provider} has been connected successfully." };
+                return new ResponseDTO { IsSuccess = true, Message = string.Format(ExternalLoginMessages.ProviderConnectedSuccessfullyFormat, provider) };
             }
             catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
             {
@@ -1040,14 +1040,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     x.Provider == provider && x.ProviderUserId == providerId);
 
                 if (racedIdentity?.UserId == userId)
-                    return new ResponseDTO { IsSuccess = true, Message = $"{provider} is already connected to this account." };
+                    return new ResponseDTO { IsSuccess = true, Message = string.Format(ExternalLoginMessages.ProviderAlreadyConnectedFormat, provider) };
 
                 return new ResponseDTO
                 {
                     IsSuccess = false,
                     Message = racedIdentity != null
                         ? ExternalLoginMessages.ProviderAlreadyConnected
-                        : $"A {provider} account is already connected to this XQARE account."
+                        : string.Format(ExternalLoginMessages.ProviderAlreadyConnectedToXqareFormat, provider)
                 };
             }
         }
@@ -1100,7 +1100,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x.UserId == userId && x.Provider == provider);
 
             if (externalLogin == null)
-                return new ResponseDTO { IsSuccess = false, Message = $"{provider} is not connected to this account." };
+                return new ResponseDTO { IsSuccess = false, Message = string.Format(ExternalLoginMessages.ProviderNotConnectedFormat, provider) };
 
             _db.ExternalLogins.Remove(externalLogin);
             await _db.SaveChangesAsync();
@@ -1108,7 +1108,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new ResponseDTO
             {
                 IsSuccess = true,
-                Message = $"{provider} has been disconnected. Your XQARE email and password sign-in remains available."
+                Message = string.Format(ExternalLoginMessages.ProviderDisconnectedFormat, provider)
             };
         }
 
