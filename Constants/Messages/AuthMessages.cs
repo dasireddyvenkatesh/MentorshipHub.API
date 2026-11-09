@@ -29,6 +29,7 @@ public static class AuthMessages
 
 public static class MfaMessages
 {
+    public const string RecoveryRequestGeneric = "If the account is eligible, a recovery verification code will be sent to its registered email address.";
     public const string SetupRequired = "Authenticator setup is required for this account. Use the account recovery process before signing in.";
     public const string EnterSixDigitCode = "Enter the six-digit code from your authenticator app.";
     public const string InvalidVerificationRequest = "The MFA verification request is invalid.";
