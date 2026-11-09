@@ -11,6 +11,20 @@ public static class AuthMessages
     public const string MfaVerificationExpired = "The verification request has expired. Please sign in again.";
     public const string SignInSessionInvalid = "The sign-in session is no longer valid. Please sign in again.";
     public const string LoginSuccessful = "Login successful";
+    public const string RecoveryRequestGeneric = "If the account is eligible, a recovery verification code will be sent to its registered email address.";
+    public const string RecoveryVerificationGenericFailure = "The recovery verification could not be completed. Request a new code and try again.";
+    public const string RecoveryEmailVerifiedPasswordless = "Email verified. Continue by signing in with an external account already connected to this XQARE account.";
+    public const string RecoveryVerificationSucceeded = "Recovery verification succeeded. Continue with authenticator replacement.";
+    public const string RecoveryCouldNotComplete = "The recovery verification could not be completed. Start account recovery again.";
+    public const string RecoveryExternalIdentityVerified = "External identity verified. Continue with authenticator replacement.";
+    public const string RecoverySessionInvalidOrExpired = "The recovery session is invalid or has expired. Request account recovery again.";
+    public const string RecoverySessionCodeRequired = "Enter a valid recovery session and six-digit authenticator code.";
+    public const string AuthenticatorRecoveryCompleted = "Authenticator recovery completed. All existing sessions were signed out. Save your new recovery codes now; they are shown only once.";
+    public const string AccountNotEligibleForAuthenticator = "The account is not eligible for authenticator setup.";
+    public const string ConfirmCurrentAccountPassword = "Confirm your current account password before setting up an authenticator.";
+    public const string CurrentAuthenticatorCodeRequired = "Enter a valid current authenticator code before replacing it.";
+    public const string CurrentPasswordIncorrectForDisable = "Current password is incorrect.";
+    public const string AuthenticatorDisabledSuccessfully = "Authenticator disabled successfully.";
 }
 
 public static class MfaMessages

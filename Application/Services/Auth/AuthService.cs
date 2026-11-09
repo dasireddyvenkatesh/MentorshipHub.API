@@ -287,7 +287,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private const string MfaRecoveryOtpPurpose = "mfa-recovery-otp";
         private const string MfaRecoveryGrantPurpose = "mfa-recovery-grant";
         private const string MfaRecoveryEmailProofPurpose = "mfa-recovery-email-proof";
-        private const string MfaRecoveryGenericMessage = "If the account is eligible, a recovery verification code will be sent to its registered email address.";
+        private const string MfaRecoveryGenericMessage = MfaMessages.RecoveryRequestGeneric;
 
         public async Task<ResponseDTO> RequestMfaAccountRecoveryAsync(MfaAccountRecoveryRequest request)
         {
@@ -397,7 +397,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<MfaAccountRecoveryVerifyResponse> VerifyMfaAccountRecoveryOtpAsync(MfaAccountRecoveryVerifyRequest request)
         {
-            const string genericFailure = "The recovery verification could not be completed. Request a new code and try again.";
+            const string genericFailure = MfaMessages.RecoveryVerificationGenericFailure;
             if (request == null || string.IsNullOrWhiteSpace(request.Email) ||
                 string.IsNullOrWhiteSpace(request.OtpCode) ||
                 !System.Text.RegularExpressions.Regex.IsMatch(request.OtpCode, @"^\d{6}$"))
@@ -472,8 +472,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 IsSuccess = true,
                 Message = isPasswordless
-                    ? "Email verified. Continue by signing in with an external account already connected to this XQARE account."
-                    : "Recovery verification succeeded. Continue with authenticator replacement.",
+                    ? MfaMessages.RecoveryEmailVerifiedPasswordless
+                    : MfaMessages.RecoveryVerificationSucceeded,
                 RecoveryGrant = isPasswordless ? null : proof,
                 EmailProof = isPasswordless ? proof : null,
                 RequiresExternalVerification = isPasswordless
@@ -483,7 +483,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<MfaAccountRecoveryVerifyResponse> CompleteExternalMfaRecoveryAsync(
             string emailProof, ExternalLoginRequest externalIdentity)
         {
-            const string failure = "The recovery verification could not be completed. Start account recovery again.";
+            const string failure = MfaMessages.RecoveryCouldNotComplete;
             if (string.IsNullOrWhiteSpace(emailProof) || emailProof.Length > 128 ||
                 externalIdentity == null || string.IsNullOrWhiteSpace(externalIdentity.Provider) ||
                 string.IsNullOrWhiteSpace(externalIdentity.ProviderId))
@@ -546,7 +546,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             return new MfaAccountRecoveryVerifyResponse
             {
                 IsSuccess = true,
-                Message = "External identity verified. Continue with authenticator replacement.",
+                Message = MfaMessages.RecoveryExternalIdentityVerified,
                 RecoveryGrant = grant
             };
         }
@@ -1687,7 +1687,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<TotpEnrollmentStartResponse> StartMfaRecoveryEnrollmentAsync(MfaAccountRecoveryEnrollmentStartRequest request)
         {
-            const string failure = "The recovery session is invalid or has expired. Request account recovery again.";
+            const string failure = MfaMessages.RecoverySessionInvalidOrExpired;
             if (request == null || string.IsNullOrWhiteSpace(request.RecoveryGrant) || request.RecoveryGrant.Length > 128)
                 return new TotpEnrollmentStartResponse { IsSuccess = false, Message = failure };
 
@@ -1746,11 +1746,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
         public async Task<TotpEnrollmentConfirmResponse> CompleteMfaAccountRecoveryAsync(MfaAccountRecoveryCompleteRequest request)
         {
-            const string failure = "The recovery session is invalid or has expired. Request account recovery again.";
+            const string failure = MfaMessages.RecoverySessionInvalidOrExpired;
             if (request == null || string.IsNullOrWhiteSpace(request.RecoveryGrant) ||
                 request.RecoveryGrant.Length > 128 || string.IsNullOrWhiteSpace(request.Code) ||
                 !System.Text.RegularExpressions.Regex.IsMatch(request.Code, @"^\d{6}$"))
-                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = "Enter a valid recovery session and six-digit authenticator code." };
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.RecoverySessionCodeRequired };
 
             var grantHash = _jwt.Hash(request.RecoveryGrant.Trim());
             await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -1828,7 +1828,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 // Recovery is already committed. A notification failure must not undo it.
             }
 
-            response.Message = "Authenticator recovery completed. All existing sessions were signed out. Save your new recovery codes now; they are shown only once.";
+            response.Message = MfaMessages.AuthenticatorRecoveryCompleted;
             return response;
         }
 
@@ -1836,15 +1836,15 @@ namespace MentorshipHub.API.Application.Classes.Auth
         {
             var user = await _db.Users.FindAsync(userId);
             if (user == null || !user.IsActive || !user.IsEmailConfirmed)
-                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = "The account is not eligible for authenticator setup." };
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = MfaMessages.AccountNotEligibleForAuthenticator };
             if (string.IsNullOrWhiteSpace(user.PasswordHash) || !_hasher.Verify(user.PasswordHash, request.CurrentPassword ?? string.Empty))
-                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = "Confirm your current account password before setting up an authenticator." };
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = MfaMessages.ConfirmCurrentAccountPassword };
             var enabled = await _totp.IsEnabledAsync(userId);
             if (enabled)
             {
                 var current = await _totp.VerifyCodeAndConsumeAsync(userId, request.CurrentTotpCode ?? string.Empty);
                 if (!current.IsValid)
-                    return new TotpEnrollmentStartResponse { IsSuccess = false, Message = "Enter a valid current authenticator code before replacing it." };
+                    return new TotpEnrollmentStartResponse { IsSuccess = false, Message = MfaMessages.CurrentAuthenticatorCodeRequired };
             }
             return await _totp.StartEnrollmentAsync(userId, user.Email, allowReplace: enabled);
         }
@@ -1859,11 +1859,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
         {
             var user = await _db.Users.FindAsync(userId);
             if (user == null || string.IsNullOrWhiteSpace(user.PasswordHash) || !_hasher.Verify(user.PasswordHash, request.CurrentPassword ?? string.Empty))
-                return new ResponseDTO { IsSuccess = false, Message = "Current password is incorrect." };
+                return new ResponseDTO { IsSuccess = false, Message = MfaMessages.CurrentPasswordIncorrectForDisable };
             var verification = await _totp.VerifyCodeAndConsumeAsync(userId, request.Code);
             if (!verification.IsValid) return new ResponseDTO { IsSuccess = false, Message = verification.Message };
             await _totp.DisableAsync(userId);
-            return new ResponseDTO { IsSuccess = true, Message = "Authenticator disabled successfully." };
+            return new ResponseDTO { IsSuccess = true, Message = MfaMessages.AuthenticatorDisabledSuccessfully };
         }
 
         public async Task<LoginResponse> VerifyRegisterEmailOtp(VerifyRegisterEmailOtpRequest request)
