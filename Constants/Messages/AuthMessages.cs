@@ -37,6 +37,7 @@ public static class MfaMessages
     public const string RecoveryCodesRegenerated = "New recovery codes generated. Previous unused codes are no longer valid.";
     public const string EnterValidSixDigitCode = "Enter a valid six-digit authenticator code.";
     public const string NotEnabled = "Authenticator is not enabled for this account.";
+    public const string NotEnabledForDisable = "Authenticator is not enabled.";
     public const string VerificationLocked = "Authenticator verification is temporarily locked. Try again later.";
     public const string TooManyVerificationCodes = "Too many incorrect codes. Authenticator verification is temporarily locked.";
     public const string InvalidOrReusedCode = "The authenticator code is invalid or has already been used.";
