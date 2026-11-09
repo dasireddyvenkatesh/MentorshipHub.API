@@ -6,6 +6,7 @@ using MentorshipHub.API.Application.DTO.Profile;
 using MentorshipHub.API.Application.Validators;
 using MentorshipHub.API.Presentation.Filters;
 using MentorshipHub.API.Presentation.Authorization;
+using MentorshipHub.API.Presentation.Middleware;
 using MentorshipHub.API.Application.Classes.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Admin;
@@ -26,11 +27,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi;
 using MentorshipHub.API.Presentation.Swagger;
-using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
@@ -296,73 +295,6 @@ builder.Services.AddScoped<IValidator<ContactUsRequest>, ContactUsRequestValidat
 
 builder.Services.AddHttpContextAccessor();
 
-builder.Services.AddRateLimiter(options =>
-{
-    // Keep IP-based protection as a coarse abuse-control layer. Account- and
-    // challenge-level controls remain responsible for password/OTP guessing.
-    static FixedWindowRateLimiterOptions CreateIpWindow(int permitLimit, TimeSpan window)
-        => new()
-        {
-            PermitLimit = permitLimit,
-            Window = window,
-            QueueLimit = 0,
-            AutoReplenishment = true
-        };
-
-    static string GetClientIp(HttpContext context)
-        => context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-
-    options.AddPolicy("auth-login-ip", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            GetClientIp(context),
-            _ => CreateIpWindow(30, TimeSpan.FromMinutes(5))));
-
-    options.AddPolicy("auth-otp-ip", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            GetClientIp(context),
-            _ => CreateIpWindow(20, TimeSpan.FromMinutes(5))));
-
-    options.AddPolicy("auth-recovery-ip", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            GetClientIp(context),
-            _ => CreateIpWindow(10, TimeSpan.FromMinutes(10))));
-
-    options.AddPolicy("auth-security-ip", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            GetClientIp(context),
-            _ => CreateIpWindow(30, TimeSpan.FromMinutes(5))));
-
-    options.OnRejected = async (context, cancellationToken) =>
-    {
-        var response = context.HttpContext.Response;
-        var endpoint = context.HttpContext.GetEndpoint();
-        var policyName = endpoint?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName
-            ?? "auth";
-
-        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan remaining)
-            ? remaining
-            : TimeSpan.FromSeconds(60);
-        var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
-
-        response.StatusCode = StatusCodes.Status429TooManyRequests;
-        response.ContentType = "application/json";
-        response.Headers["Retry-After"] = retryAfterSeconds.ToString(
-            System.Globalization.CultureInfo.InvariantCulture);
-        response.Headers["X-RateLimit-Policy"] = policyName;
-
-        await response.WriteAsJsonAsync(
-            new
-            {
-                isSuccess = false,
-                code = "rate_limit_exceeded",
-                policy = policyName,
-                retryAfterSeconds,
-                message = "Too many requests. Please wait before trying again."
-            },
-            cancellationToken);
-    };
-});
-
 builder.Services.AddScoped<IAuthorizationHandler, SuperAdminAuthorizationHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
@@ -445,7 +377,7 @@ if (swaggerEnabled)
 app.UseCors("AllowUI");
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
+app.UseMiddleware<LocalRateLimitMiddleware>();
 
 app.MapControllers();
 
