@@ -1,4 +1,5 @@
-﻿using MentorshipHub.API.Application.DTO.Auth;
+﻿using MentorshipHub.API.Constants.Messages;
+using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.DTO.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
 using MentorshipHub.API.Application.Interfaces.Email;
@@ -576,7 +577,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password))
-                return new LoginResponse { IsSuccess = false, ErrorCode = "validation_error", Message = "Enter your email address and password to sign in." };
+                return new LoginResponse { IsSuccess = false, ErrorCode = "validation_error", Message = AuthMessages.CredentialsRequired };
 
             var email = request.Email.Trim().ToLowerInvariant();
 
@@ -589,7 +590,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     IsSuccess = false,
                     ErrorCode = "account_locked",
                     RetryAfterSeconds = passwordValidation.RetryAfterSeconds,
-                    Message = $"This account is temporarily locked after multiple unsuccessful sign-in attempts. Try again in {Math.Ceiling(passwordValidation.RetryAfterSeconds.Value / 60d)} minute(s)."
+                    Message = string.Format(AuthMessages.AccountLocked, Math.Ceiling(passwordValidation.RetryAfterSeconds.Value / 60d))
                 };
             }
 
@@ -599,12 +600,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 {
                     IsSuccess = false,
                     ErrorCode = "invalid_credentials",
-                    Message = "The email address or password is incorrect. Check your details and try again."
+                    Message = AuthMessages.InvalidCredentials
                 };
             }
 
             if (!user.IsActive)
-                return new LoginResponse { IsSuccess = false, ErrorCode = "account_inactive", Message = "This account is currently inactive. Contact support if you think this is a mistake." };
+                return new LoginResponse { IsSuccess = false, ErrorCode = "account_inactive", Message = AuthMessages.AccountInactive };
 
             var relatedRecordsError = await EnsureUserRelatedRecordsAsync(user);
             if (relatedRecordsError != null)
@@ -621,7 +622,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     ErrorCode = "email_verification_required",
                     RequiresEmailVerification = true,
                     Email = user.Email,
-                    Message = "Your registration is not complete. Choose Create one free to verify your email and set your password."
+                    Message = AuthMessages.EmailVerificationRequired
                 };
             }
 
@@ -1425,7 +1426,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<LoginResponse> ExchangeExternalLoginChallengeAsync(string code)
         {
             if (string.IsNullOrWhiteSpace(code) || code.Length > 128)
-                return new LoginResponse { IsSuccess = false, Message = "The sign-in exchange has expired. Please sign in again." };
+                return new LoginResponse { IsSuccess = false, Message = AuthMessages.SignInExchangeExpired };
 
             var codeHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
             await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -1443,7 +1444,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 challenge.ExpiresAt <= now)
             {
                 await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "The sign-in exchange has expired. Please sign in again." };
+                return new LoginResponse { IsSuccess = false, Message = AuthMessages.SignInExchangeExpired };
             }
 
             if (string.Equals(challenge.Purpose, "external-mfa", StringComparison.Ordinal))
@@ -1453,7 +1454,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     challenge.ConsumedAt = now;
                     await _db.SaveChangesAsync();
                     await transaction.CommitAsync();
-                    return new LoginResponse { IsSuccess = false, Message = "The verification request has expired. Please sign in again." };
+                    return new LoginResponse { IsSuccess = false, Message = AuthMessages.MfaVerificationExpired };
                 }
 
                 var mfaChallenge = await _db.MfaLoginChallenges
@@ -1475,7 +1476,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     challenge.ConsumedAt = now;
                     await _db.SaveChangesAsync();
                     await transaction.CommitAsync();
-                    return new LoginResponse { IsSuccess = false, Message = "The verification request has expired. Please sign in again." };
+                    return new LoginResponse { IsSuccess = false, Message = AuthMessages.MfaVerificationExpired };
                 }
 
                 // Rotate the MFA challenge token during exchange. Only its hash
@@ -1494,14 +1495,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     MfaChallengeToken = mfaToken,
                     UserId = mfaUser.Id,
                     Email = mfaUser.Email,
-                    Message = "Enter the six-digit code from your authenticator app."
+                    Message = MfaMessages.EnterSixDigitCode
                 };
             }
 
             if (!Guid.TryParse(challenge.DeviceId, out var sessionId))
             {
                 await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "The sign-in exchange has expired. Please sign in again." };
+                return new LoginResponse { IsSuccess = false, Message = AuthMessages.SignInExchangeExpired };
             }
 
             var session = await _db.UserSessions
@@ -1523,7 +1524,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 challenge.ConsumedAt = now;
                 await _db.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return new LoginResponse { IsSuccess = false, Message = "The sign-in session is no longer valid. Please sign in again." };
+                return new LoginResponse { IsSuccess = false, Message = AuthMessages.SignInSessionInvalid };
             }
 
             challenge.ConsumedAt = now;
@@ -1542,7 +1543,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 Email = user.Email,
                 UserId = user.Id,
                 UserPublicId = _publicIdService.Encode(user.Id),
-                Message = "Login successful"
+                Message = AuthMessages.LoginSuccessful
             };
 
             await transaction.CommitAsync();
@@ -1587,7 +1588,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = "Authenticator setup is required for this account. Use the account recovery process before signing in."
+                    Message = MfaMessages.SetupRequired
                 };
             }
 
@@ -1612,17 +1613,17 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 MfaChallengeToken = token,
                 UserId = user.Id,
                 Email = user.Email,
-                Message = "Enter the six-digit code from your authenticator app."
+                Message = MfaMessages.EnterSixDigitCode
             };
         }
 
         public async Task<LoginResponse> VerifyMfaChallengeAsync(VerifyMfaChallengeRequest request, string challengeToken)
         {
             if (request == null || string.IsNullOrWhiteSpace(challengeToken) || string.IsNullOrWhiteSpace(request.Code))
-                return new LoginResponse { IsSuccess = false, Message = "The MFA verification request is invalid." };
+                return new LoginResponse { IsSuccess = false, Message = MfaMessages.InvalidVerificationRequest };
             var factor = (request.Factor ?? "auto").Trim().ToLowerInvariant();
             if (factor != "auto" && factor != "totp" && factor != "recovery")
-                return new LoginResponse { IsSuccess = false, Message = "Unsupported MFA verification method." };
+                return new LoginResponse { IsSuccess = false, Message = MfaMessages.UnsupportedVerificationMethod };
 
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(challengeToken)));
             await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -1633,20 +1634,20 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (challenge == null || challenge.ConsumedAt != null || challenge.ExpiresAt <= now || challenge.AttemptCount >= 5)
             {
                 await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "The MFA challenge has expired or is no longer valid. Please sign in again." };
+                return new LoginResponse { IsSuccess = false, Message = MfaMessages.ChallengeExpired };
             }
 
             if (!string.Equals(challenge.Purpose, "totp", StringComparison.Ordinal))
             {
                 await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "This authenticator challenge is no longer supported. Sign in again." };
+                return new LoginResponse { IsSuccess = false, Message = MfaMessages.ChallengeUnsupported };
             }
 
             var user = await _db.Users.Include(x => x.SecuritySetting).FirstOrDefaultAsync(x => x.Id == challenge.UserId);
             if (user == null || !user.IsActive || !user.IsEmailConfirmed || user.SecuritySetting?.MfaEnabled != true)
             {
                 await transaction.RollbackAsync();
-                return new LoginResponse { IsSuccess = false, Message = "The MFA challenge is no longer valid." };
+                return new LoginResponse { IsSuccess = false, Message = MfaMessages.ChallengeInvalid };
             }
 
             var valid = false;
@@ -1671,7 +1672,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = challenge.ConsumedAt.HasValue ? "Too many incorrect verification attempts. Sign in again to restart." : failure
+                    Message = challenge.ConsumedAt.HasValue ? MfaMessages.TooManyChallengeAttempts : failure
                 };
             }
 
@@ -2228,7 +2229,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 UserId = user.Id,
                 UserPublicId = _publicIdService.Encode(user.Id),
                 IsSuccess = true,
-                Message = "Login successful",
+                Message = AuthMessages.LoginSuccessful,
 
             };
         }
