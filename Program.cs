@@ -251,6 +251,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowUI", policy =>
     {
         policy.WithOrigins(trustedBrowserOrigins)
+              .WithExposedHeaders("Retry-After", "X-RateLimit-Policy")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -297,23 +298,67 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddPolicy("otp-ip", httpContext =>
+    // Keep IP-based protection as a coarse abuse-control layer. Account- and
+    // challenge-level controls remain responsible for password/OTP guessing.
+    static FixedWindowRateLimiterOptions CreateIpWindow(int permitLimit, TimeSpan window)
+        => new()
+        {
+            PermitLimit = permitLimit,
+            Window = window,
+            QueueLimit = 0,
+            AutoReplenishment = true
+        };
+
+    static string GetClientIp(HttpContext context)
+        => context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    options.AddPolicy("auth-login-ip", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 30,
-                Window = TimeSpan.FromHours(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
+            GetClientIp(context),
+            _ => CreateIpWindow(30, TimeSpan.FromMinutes(5))));
+
+    options.AddPolicy("auth-otp-ip", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientIp(context),
+            _ => CreateIpWindow(20, TimeSpan.FromMinutes(5))));
+
+    options.AddPolicy("auth-recovery-ip", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientIp(context),
+            _ => CreateIpWindow(10, TimeSpan.FromMinutes(10))));
+
+    options.AddPolicy("auth-security-ip", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientIp(context),
+            _ => CreateIpWindow(30, TimeSpan.FromMinutes(5))));
 
     options.OnRejected = async (context, cancellationToken) =>
     {
-        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        context.HttpContext.Response.ContentType = "application/json";
-        await context.HttpContext.Response.WriteAsJsonAsync(
-            new { isSuccess = false, message = "Too many authentication requests from this network. Please try again later." },
+        var response = context.HttpContext.Response;
+        var endpoint = context.HttpContext.GetEndpoint();
+        var policyName = endpoint?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName
+            ?? "auth";
+
+        var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan remaining)
+            ? remaining
+            : TimeSpan.FromSeconds(60);
+        var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+
+        response.StatusCode = StatusCodes.Status429TooManyRequests;
+        response.ContentType = "application/json";
+        response.Headers["Retry-After"] = retryAfterSeconds.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        response.Headers["X-RateLimit-Policy"] = policyName;
+
+        await response.WriteAsJsonAsync(
+            new
+            {
+                isSuccess = false,
+                code = "rate_limit_exceeded",
+                policy = policyName,
+                retryAfterSeconds,
+                message = "Too many requests. Please wait before trying again."
+            },
             cancellationToken);
     };
 });
