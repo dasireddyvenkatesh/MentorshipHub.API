@@ -299,7 +299,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpPost("forgot-password")]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-recovery-ip")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
         {
             var response = await _authService.RequestPasswordResetAsync(request);
@@ -308,7 +308,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpPost("reset-password")]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-recovery-ip")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
         {
             var response = await _authService.ResetPasswordAsync(request);
@@ -321,7 +321,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpPost("login")]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-login-ip")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
             var response = await _authService.LoginAsync(request);
@@ -563,7 +563,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpPost("register")]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-otp-ip")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
             var response = await _authService.RegisterAsync(request);
@@ -573,7 +573,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpPost("resend-email-otp")]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-otp-ip")]
         public async Task<IActionResult> ResendEmailOtp([FromBody] EmailOtpRequest request)
         {
             var response = await _authService.ResendEmailOtp(request);
@@ -583,7 +583,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("mfa-recovery/external/{provider}/begin")]
         [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-recovery-ip")]
         public IActionResult BeginExternalMfaRecovery(string provider, [FromBody] MfaAccountRecoveryExternalStartRequest request)
         {
             var scheme = ResolveExternalProvider(provider);
@@ -639,7 +639,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("mfa-recovery/request")]
         [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-recovery-ip")]
         public async Task<IActionResult> RequestMfaAccountRecovery([FromBody] MfaAccountRecoveryRequest request)
         {
             var response = await _authService.RequestMfaAccountRecoveryAsync(request);
@@ -648,7 +648,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("mfa-recovery/verify-otp")]
         [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-recovery-ip")]
         public async Task<IActionResult> VerifyMfaAccountRecoveryOtp([FromBody] MfaAccountRecoveryVerifyRequest request)
         {
             var response = await _authService.VerifyMfaAccountRecoveryOtpAsync(request);
@@ -657,7 +657,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("mfa-recovery/start-enrollment")]
         [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-recovery-ip")]
         public async Task<IActionResult> StartMfaRecoveryEnrollment([FromBody] MfaAccountRecoveryEnrollmentStartRequest request)
         {
             var response = await _authService.StartMfaRecoveryEnrollmentAsync(request);
@@ -666,7 +666,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("mfa-recovery/complete")]
         [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-recovery-ip")]
         public async Task<IActionResult> CompleteMfaAccountRecovery([FromBody] MfaAccountRecoveryCompleteRequest request)
         {
             var response = await _authService.CompleteMfaAccountRecoveryAsync(request);
@@ -682,7 +682,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("verify-mfa-challenge")]
         [AllowAnonymous]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-otp-ip")]
         public async Task<IActionResult> VerifyMfaChallenge([FromBody] VerifyMfaChallengeRequest request)
         {
             // Prefer the short-lived challenge token explicitly returned to the
@@ -705,7 +705,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpPost("verify-register-email-otp")]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-otp-ip")]
         public async Task<IActionResult> VerifyRegisterEmailOtp([FromBody] VerifyRegisterEmailOtpRequest request)
         {
             var response = await _authService.VerifyRegisterEmailOtp(request);
@@ -835,7 +835,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("external-links/{provider}/disconnect")]
         [Authorize]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> DisconnectExternalLogin(
             string provider,
             [FromBody] DisconnectExternalLoginRequest request)
@@ -858,7 +858,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("change-password")]
         [Authorize]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
             var userId = CurrentUserId();
@@ -880,7 +880,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("totp/enrollment/start")]
         [Authorize]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> StartTotpEnrollment([FromBody] TotpEnrollmentStartRequest request)
         {
             var id = CurrentUserId();
@@ -890,7 +890,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("totp/enrollment/confirm")]
         [Authorize]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> ConfirmTotpEnrollment([FromBody] TotpEnrollmentConfirmRequest request)
         {
             var id = CurrentUserId();
@@ -900,7 +900,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("totp/recovery-codes/regenerate")]
         [Authorize]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> RegenerateTotpRecoveryCodes([FromBody] TotpRecoveryCodesRegenerateRequest request)
         {
             var id = CurrentUserId();
@@ -910,7 +910,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [HttpPost("totp/disable")]
         [Authorize]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-security-ip")]
         public async Task<IActionResult> DisableTotp([FromBody] TotpDisableRequest request)
         {
             var id = CurrentUserId();
@@ -920,7 +920,7 @@ namespace MentorshipHub.API.Presentation.Controllers
 
         [AllowAnonymous]
         [HttpPost("external-login/exchange")]
-        [EnableRateLimiting("otp-ip")]
+        [EnableRateLimiting("auth-login-ip")]
         public async Task<IActionResult> ExchangeExternalLogin([FromBody] string code)
         {
             if (!HasTrustedBrowserOrigin(requireSource: true))
