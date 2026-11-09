@@ -1,5 +1,6 @@
 ﻿using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Constants.Messages;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.DTO.Common;
 using MentorshipHub.API.Application.Interfaces.Auth;
@@ -1984,7 +1985,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<(RefreshTokenResponse response, string refreshToken)> RefreshAsync(string refreshToken)
         {
             if (string.IsNullOrWhiteSpace(refreshToken))
-                return (new RefreshTokenResponse { IsSuccess = false, Message = "Refresh token missing" }, default!);
+                return (new RefreshTokenResponse { IsSuccess = false, Message = SessionMessages.RefreshTokenMissing }, default!);
 
             // Lock the current token row before validating and rotating it. A second tab
             // presenting the same cookie waits for the first transaction, then finds that
@@ -2001,7 +2002,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (session == null || session.IsRevoked || session.RevokedAt != null || session.ExpiresAt <= now)
             {
                 await transaction.RollbackAsync();
-                return (new RefreshTokenResponse { IsSuccess = false, Message = "Login expired. Please sign in again." }, default!);
+                return (new RefreshTokenResponse { IsSuccess = false, Message = SessionMessages.LoginExpired }, default!);
             }
 
             // Enforce a maximum session lifetime in addition to the sliding seven-day window.
@@ -2011,14 +2012,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 session.RevokedAt = now;
                 await _db.SaveChangesAsync();
                 await transaction.CommitAsync();
-                return (new RefreshTokenResponse { IsSuccess = false, Message = "Maximum session age reached. Please sign in again." }, default!);
+                return (new RefreshTokenResponse { IsSuccess = false, Message = SessionMessages.MaximumAgeReached }, default!);
             }
 
             var user = await _db.Users.FindAsync(session.UserId);
             if (user == null || !user.IsActive)
             {
                 await transaction.RollbackAsync();
-                return (new RefreshTokenResponse { IsSuccess = false, Message = "Account is inactive. Please sign in again." }, default!);
+                return (new RefreshTokenResponse { IsSuccess = false, Message = SessionMessages.AccountInactive }, default!);
             }
 
             var roles = await GetRoles(user.Id);
@@ -2032,7 +2033,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 AccessToken = accessToken,
                 IsSuccess = true,
-                Message = "Refresh Token Updated"
+                Message = SessionMessages.RefreshTokenUpdated
             };
 
             await transaction.CommitAsync();
