@@ -1,4 +1,5 @@
 using MentorshipHub.API.Application.DTO.Admin;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.Interfaces.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -35,14 +36,14 @@ namespace MentorshipHub.API.Presentation.Controllers
             [FromQuery] int pageSize = 20)
         {
             if (search?.Length > 100)
-                return BadRequest(new { isSuccess = false, message = "Search text cannot exceed 100 characters." });
+                return BadRequest(new { isSuccess = false, message = AdminMessages.SearchTooLong });
 
             if (roleCode?.Length > 50)
-                return BadRequest(new { isSuccess = false, message = "Role code cannot exceed 50 characters." });
+                return BadRequest(new { isSuccess = false, message = AdminMessages.RoleCodeTooLong });
 
             if (createdFromUtc.HasValue && createdToUtc.HasValue &&
                 createdFromUtc.Value > createdToUtc.Value)
-                return BadRequest(new { isSuccess = false, message = "The registration start date must be before or equal to the end date." });
+                return BadRequest(new { isSuccess = false, message = AdminMessages.InvalidRegistrationDateRange });
 
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
@@ -58,7 +59,7 @@ namespace MentorshipHub.API.Presentation.Controllers
         {
             var user = await _adminService.GetUserDetailsAsync(userId);
             return user == null
-                ? NotFound(new { isSuccess = false, message = "The requested user could not be found." })
+                ? NotFound(new { isSuccess = false, message = AdminMessages.UserNotFound })
                 : Ok(user);
         }
 
@@ -69,7 +70,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             [FromBody] UpdateAdminUserStatusRequest request)
         {
             if (!Guid.TryParse(User.FindFirst("uid")?.Value, out var actorUserId))
-                return Unauthorized(new { isSuccess = false, message = "The administrator identity is invalid." });
+                return Unauthorized(new { isSuccess = false, message = AdminMessages.AdministratorIdentityInvalid });
 
             var result = await _adminService.UpdateUserStatusAsync(
                 actorUserId, userId, request.IsActive);

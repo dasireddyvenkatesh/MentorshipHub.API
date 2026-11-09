@@ -1,4 +1,5 @@
 using MentorshipHub.API.Application.DTO.Admin;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.Interfaces.Admin;
 using MentorshipHub.API.Enities;
 using Microsoft.EntityFrameworkCore;
@@ -221,7 +222,7 @@ namespace MentorshipHub.API.Application.Services.Admin
                 {
                     IsSuccess = false,
                     ErrorCode = "SELF_DISABLE",
-                    Message = "You cannot disable your own administrator account."
+                    Message = AdminMessages.SelfDisable
                 };
             }
 
@@ -243,7 +244,7 @@ namespace MentorshipHub.API.Application.Services.Admin
                 {
                     IsSuccess = false,
                     ErrorCode = "NOT_FOUND",
-                    Message = "The requested user could not be found."
+                    Message = AdminMessages.UserNotFound
                 };
             }
 
@@ -262,7 +263,7 @@ namespace MentorshipHub.API.Application.Services.Admin
                     {
                         IsSuccess = false,
                         ErrorCode = "LAST_SUPERADMIN",
-                        Message = "The last active Super Admin cannot be disabled."
+                        Message = AdminMessages.LastActiveSuperAdminCannotDisable
                     };
                 }
             }
@@ -301,8 +302,8 @@ namespace MentorshipHub.API.Application.Services.Admin
             {
                 IsSuccess = true,
                 Message = isActive
-                    ? "The account has been enabled. The user can sign in again."
-                    : "The account has been disabled and its active sessions have been revoked.",
+                    ? AdminMessages.AccountEnabled
+                    : AdminMessages.AccountDisabled,
                 IsActive = user.IsActive,
                 AffectedSessions = affectedSessions
             };
