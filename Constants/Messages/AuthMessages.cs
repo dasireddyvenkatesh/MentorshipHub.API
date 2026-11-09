@@ -11,6 +11,10 @@ public static class AuthMessages
     public const string MfaVerificationExpired = "The verification request has expired. Please sign in again.";
     public const string SignInSessionInvalid = "The sign-in session is no longer valid. Please sign in again.";
     public const string LoginSuccessful = "Login successful";
+}
+
+public static class MfaMessages
+{
     public const string RecoveryVerificationGenericFailure = "The recovery verification could not be completed. Request a new code and try again.";
     public const string RecoveryEmailVerifiedPasswordless = "Email verified. Continue by signing in with an external account already connected to this XQARE account.";
     public const string RecoveryVerificationSucceeded = "Recovery verification succeeded. Continue with authenticator replacement.";
@@ -24,10 +28,6 @@ public static class AuthMessages
     public const string CurrentAuthenticatorCodeRequired = "Enter a valid current authenticator code before replacing it.";
     public const string CurrentPasswordIncorrectForDisable = "Current password is incorrect.";
     public const string AuthenticatorDisabledSuccessfully = "Authenticator disabled successfully.";
-}
-
-public static class MfaMessages
-{
     public const string RecoveryRequestGeneric = "If the account is eligible, a recovery verification code will be sent to its registered email address.";
     public const string SetupRequired = "Authenticator setup is required for this account. Use the account recovery process before signing in.";
     public const string EnterSixDigitCode = "Enter the six-digit code from your authenticator app.";

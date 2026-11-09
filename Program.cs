@@ -1,4 +1,5 @@
 using FluentValidation;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.Classes.Auth;
 using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.DTO.ContactUs;
