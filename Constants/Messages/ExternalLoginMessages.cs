@@ -40,4 +40,11 @@ public static class ExternalLoginMessages
     public const string ProviderEmailMissingForRegistration = "This provider did not supply a verified email address. Use email registration or an already-linked provider.";
     public const string ExistingAccountForEmail = "An account already exists with this email. Sign in using your existing method before linking another provider.";
     public const string EmailNotVerified = "This account's email is not verified. Complete registration from the Register page first.";
+    public const string ProviderAccountIdentifierInvalid = "The provider account identifier is invalid.";
+    public const string ProviderAlreadyConnectedFormat = "{0} is already connected to this account.";
+    public const string DifferentProviderAccountAlreadyConnectedFormat = "A different {0} account is already connected. Disconnect it before connecting another one.";
+    public const string ProviderConnectedSuccessfullyFormat = "{0} has been connected successfully.";
+    public const string ProviderAlreadyConnectedToXqareFormat = "A {0} account is already connected to this XQARE account.";
+    public const string ProviderNotConnectedFormat = "{0} is not connected to this account.";
+    public const string ProviderDisconnectedFormat = "{0} has been disconnected. Your XQARE email and password sign-in remains available.";
 }

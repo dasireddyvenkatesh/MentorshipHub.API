@@ -959,7 +959,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             var providerId = request.ProviderId.Trim();
             if (providerId.Length > 256)
-                return new ResponseDTO { IsSuccess = false, Message = "The provider account identifier is invalid." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.ProviderAccountIdentifierInvalid };
 
             var now = DateTime.UtcNow;
             var activeSession = await _db.UserSessions.AsNoTracking().AnyAsync(x =>
@@ -970,7 +970,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x.ExpiresAt > now);
 
             if (!activeSession)
-                return new ResponseDTO { IsSuccess = false, Message = "Your XQARE session is no longer active. Sign in again before connecting an account." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.SessionInactiveConnect };
 
             var user = await _db.Users.FirstOrDefaultAsync(x =>
                 x.Id == userId && x.IsActive && x.IsEmailConfirmed);
