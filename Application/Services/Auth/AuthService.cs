@@ -662,8 +662,9 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var now = DateTime.UtcNow;
             if (security.LockoutEnd.HasValue && security.LockoutEnd.Value > now)
             {
+                var remainingSeconds = Math.Max(1, (int)Math.Ceiling((security.LockoutEnd.Value - now).TotalSeconds));
                 await transaction.CommitAsync();
-                return (null, false);
+                return (null, false, remainingSeconds);
             }
 
             if (!_hasher.Verify(user.PasswordHash, password))
@@ -691,8 +692,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 }
 
                 await _db.SaveChangesAsync();
+                var retryAfterSeconds = security.LockoutEnd.HasValue && security.LockoutEnd.Value > now
+                    ? Math.Max(1, (int)Math.Ceiling((security.LockoutEnd.Value - now).TotalSeconds))
+                    : (int?)null;
                 await transaction.CommitAsync();
-                return (null, false);
+                return (null, false, retryAfterSeconds);
             }
 
             // Upgrade legacy raw BCrypt hashes after a successful password check.
