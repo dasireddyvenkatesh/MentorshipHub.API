@@ -2045,7 +2045,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new RegisterResponse
                 {
                     IsSuccess = false,
-                    Message = "If this email can be registered, we'll send verification instructions. If you already have an account, please sign in."
+                    Message = RegistrationMessages.ExistingAccountGeneric
                 };
             }
 
@@ -2156,17 +2156,17 @@ namespace MentorshipHub.API.Application.Classes.Auth
         private static string? ValidateRegistrationRequest(RegisterRequest request)
         {
             if (request == null)
-                return "Registration details are required.";
+                return RegistrationMessages.DetailsRequired;
 
             if (string.IsNullOrWhiteSpace(request.FullName))
-                return "Full name is required.";
+                return ValidationMessages.FullNameRequired;
 
             if (request.FullName.Trim().Length > 100)
-                return "Full name must be 100 characters or fewer.";
+                return ValidationMessages.FullNameMaxLength;
 
             var email = request.Email?.Trim();
             if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
-                return "Enter a valid email address.";
+                return ValidationMessages.InvalidEmail;
 
             return null;
         }
