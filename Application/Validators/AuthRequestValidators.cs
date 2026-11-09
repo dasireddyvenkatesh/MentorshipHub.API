@@ -1,4 +1,5 @@
 using FluentValidation;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.DTO.Auth;
 
 namespace MentorshipHub.API.Application.Validators;
@@ -9,14 +10,14 @@ public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest
     {
         RuleFor(x => x.FullName)
             .Must(value => !string.IsNullOrWhiteSpace(value))
-            .WithMessage("Full name is required.")
-            .MaximumLength(100).WithMessage("Full name must be 100 characters or fewer.")
+            .WithMessage(ValidationMessages.FullNameRequired)
+            .MaximumLength(100).WithMessage(ValidationMessages.FullNameMaxLength)
             .Matches(NameValidationRules.Pattern)
-            .WithMessage("Full name can contain letters, spaces, apostrophes and hyphens only.");
+            .WithMessage(ValidationMessages.FullNameCharacters);
 
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required.")
-            .EmailAddress().WithMessage("Enter a valid email address.")
+            .NotEmpty().WithMessage(ValidationMessages.EmailRequired)
+            .EmailAddress().WithMessage(ValidationMessages.InvalidEmail)
             .MaximumLength(256);
 
         RuleFor(x => x.DeviceId).MaximumLength(256);
@@ -29,17 +30,17 @@ public sealed class LoginRequestValidator : AbstractValidator<LoginRequest>
     public LoginRequestValidator()
     {
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required.")
-            .EmailAddress().WithMessage("Enter a valid email address.")
+            .NotEmpty().WithMessage(ValidationMessages.EmailRequired)
+            .EmailAddress().WithMessage(ValidationMessages.InvalidEmail)
             .MaximumLength(256);
 
         // Sign-in validates presence only. Do not impose new length/complexity
         // restrictions on existing credentials during authentication.
         RuleFor(x => x.Password)
-            .NotEmpty().WithMessage("Password is required.")
+            .NotEmpty().WithMessage(ValidationMessages.PasswordRequired)
             // Bound untrusted request work without imposing registration complexity
             // rules on existing credentials.
-            .MaximumLength(1024).WithMessage("Password input is too long.");
+            .MaximumLength(1024).WithMessage(ValidationMessages.PasswordInputTooLong);
 
         RuleFor(x => x.DeviceId).MaximumLength(256);
         RuleFor(x => x.DeviceName).MaximumLength(256);
@@ -51,21 +52,21 @@ public sealed class ChangePasswordRequestValidator : AbstractValidator<ChangePas
     public ChangePasswordRequestValidator()
     {
         RuleFor(x => x.CurrentPassword)
-            .NotEmpty().WithMessage("Current password is required.")
+            .NotEmpty().WithMessage(ValidationMessages.CurrentPasswordRequired)
             .MaximumLength(128);
 
         RuleFor(x => x.NewPassword)
-            .NotEmpty().WithMessage("New password is required.")
-            .MinimumLength(8).WithMessage("Password must be at least 8 characters.")
-            .MaximumLength(128).WithMessage("Password cannot exceed 128 characters.")
-            .Matches("[A-Z]").WithMessage("Include at least one uppercase letter.")
-            .Matches("[a-z]").WithMessage("Include at least one lowercase letter.")
-            .Matches("[0-9]").WithMessage("Include at least one number.")
-            .Matches(@"[\W_]").WithMessage("Include at least one symbol.");
+            .NotEmpty().WithMessage(ValidationMessages.NewPasswordRequired)
+            .MinimumLength(8).WithMessage(ValidationMessages.PasswordMinLength)
+            .MaximumLength(128).WithMessage(ValidationMessages.PasswordMaxLength)
+            .Matches("[A-Z]").WithMessage(ValidationMessages.UppercaseRequired)
+            .Matches("[a-z]").WithMessage(ValidationMessages.LowercaseRequired)
+            .Matches("[0-9]").WithMessage(ValidationMessages.NumberRequired)
+            .Matches(@"[\W_]").WithMessage(ValidationMessages.SymbolRequired);
 
         RuleFor(x => x.ConfirmPassword)
-            .NotEmpty().WithMessage("Confirm your new password.")
-            .Equal(x => x.NewPassword).WithMessage("Passwords do not match.")
+            .NotEmpty().WithMessage(ValidationMessages.ConfirmPasswordRequired)
+            .Equal(x => x.NewPassword).WithMessage(ValidationMessages.PasswordsDoNotMatch)
             .MaximumLength(128);
     }
 }
@@ -75,21 +76,21 @@ public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPassw
     public ResetPasswordRequestValidator()
     {
         RuleFor(x => x.Token)
-            .NotEmpty().WithMessage("The password reset token is required.")
+            .NotEmpty().WithMessage(ValidationMessages.ResetTokenRequired)
             .MaximumLength(512);
 
         RuleFor(x => x.Password)
-            .NotEmpty().WithMessage("Password is required.")
-            .MinimumLength(8).WithMessage("Password must be at least 8 characters.")
-            .MaximumLength(128).WithMessage("Password cannot exceed 128 characters.")
-            .Matches("[A-Z]").WithMessage("Include at least one uppercase letter.")
-            .Matches("[a-z]").WithMessage("Include at least one lowercase letter.")
-            .Matches("[0-9]").WithMessage("Include at least one number.")
-            .Matches(@"[\W_]").WithMessage("Include at least one symbol.");
+            .NotEmpty().WithMessage(ValidationMessages.PasswordRequired)
+            .MinimumLength(8).WithMessage(ValidationMessages.PasswordMinLength)
+            .MaximumLength(128).WithMessage(ValidationMessages.PasswordMaxLength)
+            .Matches("[A-Z]").WithMessage(ValidationMessages.UppercaseRequired)
+            .Matches("[a-z]").WithMessage(ValidationMessages.LowercaseRequired)
+            .Matches("[0-9]").WithMessage(ValidationMessages.NumberRequired)
+            .Matches(@"[\W_]").WithMessage(ValidationMessages.SymbolRequired);
 
         RuleFor(x => x.ConfirmPassword)
-            .NotEmpty().WithMessage("Confirm your new password.")
-            .Equal(x => x.Password).WithMessage("Passwords do not match.")
+            .NotEmpty().WithMessage(ValidationMessages.ConfirmPasswordRequired)
+            .Equal(x => x.Password).WithMessage(ValidationMessages.PasswordsDoNotMatch)
             .MaximumLength(128);
     }
 }
@@ -102,8 +103,8 @@ public sealed class ForgotPasswordRequestValidator : AbstractValidator<ForgotPas
         // Only validate address syntax. The endpoint still returns the same
         // generic success message for valid addresses whether or not an account exists.
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required.")
-            .EmailAddress().WithMessage("Enter a valid email address.")
+            .NotEmpty().WithMessage(ValidationMessages.EmailRequired)
+            .EmailAddress().WithMessage(ValidationMessages.InvalidEmail)
             .MaximumLength(256);
     }
 }
@@ -113,8 +114,8 @@ public sealed class EmailOtpRequestValidator : AbstractValidator<EmailOtpRequest
     public EmailOtpRequestValidator()
     {
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required.")
-            .EmailAddress().WithMessage("Enter a valid email address.")
+            .NotEmpty().WithMessage(ValidationMessages.EmailRequired)
+            .EmailAddress().WithMessage(ValidationMessages.InvalidEmail)
             .MaximumLength(256);
     }
 }
@@ -124,13 +125,13 @@ public sealed class VerifyEmailOtpRequestValidator : AbstractValidator<VerifyEma
     public VerifyEmailOtpRequestValidator()
     {
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required.")
-            .EmailAddress().WithMessage("Enter a valid email address.")
+            .NotEmpty().WithMessage(ValidationMessages.EmailRequired)
+            .EmailAddress().WithMessage(ValidationMessages.InvalidEmail)
             .MaximumLength(256);
 
         RuleFor(x => x.OtpCode)
-            .NotEmpty().WithMessage("Verification code is required.")
-            .Matches(@"^\d{6}$").WithMessage("OTP must contain exactly six digits.");
+            .NotEmpty().WithMessage(ValidationMessages.VerificationCodeRequired)
+            .Matches(@"^\d{6}$").WithMessage(ValidationMessages.OtpSixDigits);
 
         RuleFor(x => x.DeviceId).MaximumLength(256);
         RuleFor(x => x.DeviceName).MaximumLength(256);
@@ -142,13 +143,13 @@ public sealed class VerifyRegisterEmailOtpRequestValidator : AbstractValidator<V
     public VerifyRegisterEmailOtpRequestValidator()
     {
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required.")
-            .EmailAddress().WithMessage("Enter a valid email address.")
+            .NotEmpty().WithMessage(ValidationMessages.EmailRequired)
+            .EmailAddress().WithMessage(ValidationMessages.InvalidEmail)
             .MaximumLength(256);
 
         RuleFor(x => x.OtpCode)
-            .NotEmpty().WithMessage("Verification code is required.")
-            .Matches(@"^\d{6}$").WithMessage("OTP must contain exactly six digits.");
+            .NotEmpty().WithMessage(ValidationMessages.VerificationCodeRequired)
+            .Matches(@"^\d{6}$").WithMessage(ValidationMessages.OtpSixDigits);
 
         RuleFor(x => x.DeviceId).MaximumLength(256);
         RuleFor(x => x.DeviceName).MaximumLength(256);
@@ -165,17 +166,17 @@ public sealed class VerifyMfaChallengeRequestValidator : AbstractValidator<Verif
     {
         RuleFor(x => x.Factor)
             .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithMessage("Choose a verification method.")
+            .NotEmpty().WithMessage(ValidationMessages.ChooseVerificationMethod)
             .Must(value => new[] { "auto", "totp", "recovery" }
                 .Contains(value.Trim(), StringComparer.OrdinalIgnoreCase))
-            .WithMessage("Choose a supported verification method.");
+            .WithMessage(ValidationMessages.SupportedVerificationMethod);
 
         RuleFor(x => x.ChallengeToken).MaximumLength(512);
 
         RuleFor(x => x.Code)
             .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("A verification code is required.")
-            .MaximumLength(36).WithMessage("The verification code is too long.")
+            .MaximumLength(36).WithMessage(ValidationMessages.VerificationCodeTooLong)
             .Must((request, value) =>
             {
                 var code = value?.Trim() ?? string.Empty;
@@ -191,6 +192,6 @@ public sealed class VerifyMfaChallengeRequestValidator : AbstractValidator<Verif
 
                 return code.Length == 6 && code.All(char.IsDigit);
             })
-            .WithMessage("Enter a valid six-digit authenticator code or recovery code.");
+            .WithMessage(ValidationMessages.ValidAuthenticatorOrRecoveryCode);
     }
 }

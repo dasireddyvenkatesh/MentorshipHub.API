@@ -1,4 +1,5 @@
 using FluentValidation;
+using MentorshipHub.API.Constants.Messages;
 using MentorshipHub.API.Application.DTO.ContactUs;
 using MentorshipHub.API.Application.DTO.Profile;
 
@@ -10,23 +11,23 @@ public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMy
     {
         RuleFor(x => x.FirstName)
             .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithMessage("First name is required.")
+            .NotEmpty().WithMessage(ValidationMessages.FirstNameRequired)
             .MaximumLength(80)
             .Matches(NameValidationRules.Pattern)
-            .WithMessage("First name can contain letters, spaces, apostrophes and hyphens only.");
+            .WithMessage(ValidationMessages.FirstNameCharacters);
 
         RuleFor(x => x.LastName)
             .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithMessage("Last name is required.")
+            .NotEmpty().WithMessage(ValidationMessages.LastNameRequired)
             .MaximumLength(80)
             .Matches(NameValidationRules.Pattern)
-            .WithMessage("Last name can contain letters, spaces, apostrophes and hyphens only.");
+            .WithMessage(ValidationMessages.LastNameCharacters);
 
         RuleFor(x => x.PhoneNumber)
             .Must(value => string.IsNullOrWhiteSpace(value) ||
                            System.Text.RegularExpressions.Regex.IsMatch(
                                value.Trim(), NameValidationRules.IndianMobilePattern))
-            .WithMessage("Enter a valid Indian mobile number (10 digits, optionally with +91 or 0 prefix).");
+            .WithMessage(ValidationMessages.IndianMobileInvalid);
         RuleFor(x => x.Bio).MaximumLength(600);
     }
 }
@@ -37,24 +38,24 @@ public sealed class ContactUsRequestValidator : AbstractValidator<ContactUsReque
     {
         RuleFor(x => x.FullName)
             .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithMessage("Full name is required.")
+            .NotEmpty().WithMessage(ValidationMessages.FullNameRequired)
             .MaximumLength(100)
             .Matches(NameValidationRules.Pattern)
-            .WithMessage("Full name can contain letters, spaces, apostrophes and hyphens only.");
+            .WithMessage(ValidationMessages.FullNameCharacters);
 
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required.")
-            .EmailAddress().WithMessage("Enter a valid email address.")
+            .NotEmpty().WithMessage(ValidationMessages.EmailRequired)
+            .EmailAddress().WithMessage(ValidationMessages.InvalidEmail)
             .MaximumLength(256);
 
         RuleFor(x => x.Subject)
-            .NotEmpty().WithMessage("Subject is required.")
-            .MinimumLength(5).WithMessage("Subject must contain at least 5 characters.")
+            .NotEmpty().WithMessage(ValidationMessages.SubjectRequired)
+            .MinimumLength(5).WithMessage(ValidationMessages.SubjectMinLength)
             .MaximumLength(100);
 
         RuleFor(x => x.Message)
-            .NotEmpty().WithMessage("Message is required.")
-            .MinimumLength(20).WithMessage("Message must contain at least 20 characters.")
+            .NotEmpty().WithMessage(ValidationMessages.MessageRequired)
+            .MinimumLength(20).WithMessage(ValidationMessages.MessageMinLength)
             .MaximumLength(500);
     }
 }
