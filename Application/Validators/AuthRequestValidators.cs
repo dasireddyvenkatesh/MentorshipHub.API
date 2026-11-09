@@ -175,7 +175,7 @@ public sealed class VerifyMfaChallengeRequestValidator : AbstractValidator<Verif
 
         RuleFor(x => x.Code)
             .Cascade(CascadeMode.Stop)
-            .NotEmpty().WithMessage("A verification code is required.")
+            .NotEmpty().WithMessage(ValidationMessages.VerificationCodeRequired)
             .MaximumLength(36).WithMessage(ValidationMessages.VerificationCodeTooLong)
             .Must((request, value) =>
             {
