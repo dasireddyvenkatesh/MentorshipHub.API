@@ -576,23 +576,35 @@ namespace MentorshipHub.API.Application.Classes.Auth
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrEmpty(request.Password))
-                return new LoginResponse { IsSuccess = false, Message = "Email and password are required." };
+                return new LoginResponse { IsSuccess = false, ErrorCode = "validation_error", Message = "Enter your email address and password to sign in." };
 
             var email = request.Email.Trim().ToLowerInvariant();
 
             var passwordValidation = await ValidatePasswordWithLockoutAsync(email, request.Password);
             var user = passwordValidation.User;
+            if (passwordValidation.RetryAfterSeconds.HasValue)
+            {
+                return new LoginResponse
+                {
+                    IsSuccess = false,
+                    ErrorCode = "account_locked",
+                    RetryAfterSeconds = passwordValidation.RetryAfterSeconds,
+                    Message = $"This account is temporarily locked after multiple unsuccessful sign-in attempts. Try again in {Math.Ceiling(passwordValidation.RetryAfterSeconds.Value / 60d)} minute(s)."
+                };
+            }
+
             if (!passwordValidation.IsValid || user == null)
             {
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = "Invalid email or password. If you have not completed registration, choose Create one free to finish email verification."
+                    ErrorCode = "invalid_credentials",
+                    Message = "The email address or password is incorrect. Check your details and try again."
                 };
             }
 
             if (!user.IsActive)
-                return new LoginResponse { IsSuccess = false, Message = "Account is inactive." };
+                return new LoginResponse { IsSuccess = false, ErrorCode = "account_inactive", Message = "This account is currently inactive. Contact support if you think this is a mistake." };
 
             var relatedRecordsError = await EnsureUserRelatedRecordsAsync(user);
             if (relatedRecordsError != null)
@@ -606,7 +618,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    RequiresEmailVerification = false,
+                    ErrorCode = "email_verification_required",
+                    RequiresEmailVerification = true,
                     Email = user.Email,
                     Message = "Your registration is not complete. Choose Create one free to verify your email and set your password."
                 };
@@ -619,7 +632,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
         }
 
 
-        private async Task<(User? User, bool IsValid)> ValidatePasswordWithLockoutAsync(string email, string password)
+        private async Task<(User? User, bool IsValid, int? RetryAfterSeconds)> ValidatePasswordWithLockoutAsync(string email, string password)
         {
             await using var transaction = await _db.Database.BeginTransactionAsync();
             var lockKey = "login:" + email;
@@ -635,7 +648,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (user == null || string.IsNullOrWhiteSpace(user.PasswordHash))
             {
                 await transaction.CommitAsync();
-                return (null, false);
+                return (null, false, null);
             }
 
             var security = user.SecuritySetting;
@@ -695,7 +708,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             security.LockoutLevel = 0;
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
-            return (user, true);
+            return (user, true, null);
         }
 
         public async Task<RegisterResponse> RegisterAsync(RegisterRequest request)
