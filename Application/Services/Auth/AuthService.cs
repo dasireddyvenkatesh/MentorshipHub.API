@@ -161,7 +161,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
 
             var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId && x.IsActive);
             if (user == null)
-                return new ResponseDTO { IsSuccess = false, Message = "The account could not be verified." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.AccountCouldNotBeVerified };
 
             // External-provider-only accounts must use the account recovery flow to establish
             // local password sign-in. This endpoint never silently creates a password.
@@ -740,7 +740,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new RegisterResponse
                 {
                     IsSuccess = false,
-                    Message = "The default Member role is not configured. Please contact support."
+                    Message = ExternalLoginMessages.DefaultMemberRoleMissing
                 };
             }
 
@@ -816,7 +816,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ConnectedAccountsResponse
                 {
                     IsSuccess = false,
-                    Message = "The account could not be verified."
+                    Message = ExternalLoginMessages.AccountCouldNotBeVerified
                 };
             }
 
@@ -833,7 +833,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 Email = account.Email,
                 HasPassword = account.HasPassword,
                 ConnectedProviders = providers,
-                Message = "Connected sign-in methods retrieved."
+                Message = ExternalLoginMessages.ConnectedMethodsRetrieved
             };
         }
 
@@ -947,7 +947,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "The external provider did not return a valid account identifier."
+                    Message = ExternalLoginMessages.ProviderIdentifierInvalid
                 };
             }
 
@@ -957,7 +957,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x => string.Equals(x, provider, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
 
             if (string.IsNullOrEmpty(provider))
-                return new ResponseDTO { IsSuccess = false, Message = "This sign-in provider is not supported." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.InvalidProviderService };
 
             var providerId = request.ProviderId.Trim();
             if (providerId.Length > 256)
@@ -978,7 +978,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x.Id == userId && x.IsActive && x.IsEmailConfirmed);
 
             if (user == null)
-                return new ResponseDTO { IsSuccess = false, Message = "The XQARE account could not be verified." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.AccountCouldNotVerify };
 
             // A provider link must represent the same verified email identity as the
             // authenticated XQARE account. Authentication to two unrelated identities
@@ -991,7 +991,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "This provider did not supply a verified email address. XQARE can only connect providers that return a verified matching email."
+                    Message = ExternalLoginMessages.ProviderEmailUnverified
                 };
             }
 
@@ -1000,7 +1000,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "The verified email on this provider account does not match your XQARE account email. Sign in to the XQARE account with that email before connecting this provider."
+                    Message = ExternalLoginMessages.ProviderEmailMismatch
                 };
             }
 
@@ -1011,7 +1011,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 return identityOwner.UserId == userId
                     ? new ResponseDTO { IsSuccess = true, Message = $"{provider} is already connected to this account." }
-                    : new ResponseDTO { IsSuccess = false, Message = "This provider account is already connected to another XQARE account." };
+                    : new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.ProviderAlreadyConnected };
             }
 
             var existingProvider = await _db.ExternalLogins.AnyAsync(x =>
@@ -1048,7 +1048,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 {
                     IsSuccess = false,
                     Message = racedIdentity != null
-                        ? "This provider account is already connected to another XQARE account."
+                        ? ExternalLoginMessages.ProviderAlreadyConnected
                         : $"A {provider} account is already connected to this XQARE account."
                 };
             }
@@ -1062,7 +1062,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 string.Equals(x, provider?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
 
             if (string.IsNullOrEmpty(provider))
-                return new ResponseDTO { IsSuccess = false, Message = "This sign-in provider is not supported." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.InvalidProviderService };
 
             var now = DateTime.UtcNow;
             var activeSession = await _db.UserSessions.AsNoTracking().AnyAsync(x =>
@@ -1073,13 +1073,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 x.ExpiresAt > now);
 
             if (!activeSession)
-                return new ResponseDTO { IsSuccess = false, Message = "Your XQARE session is no longer active. Sign in again before changing connected accounts." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.SessionInactiveChange };
 
             var user = await _db.Users.FirstOrDefaultAsync(x =>
                 x.Id == userId && x.IsActive && x.IsEmailConfirmed);
 
             if (user == null)
-                return new ResponseDTO { IsSuccess = false, Message = "The XQARE account could not be verified." };
+                return new ResponseDTO { IsSuccess = false, Message = ExternalLoginMessages.AccountCouldNotVerify };
 
             // Disconnect is a security-sensitive action. Require the local password
             // as step-up verification and keep at least one independent local login path.
@@ -1088,7 +1088,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new ResponseDTO
                 {
                     IsSuccess = false,
-                    Message = "Set up email and password sign-in before disconnecting a provider."
+                    Message = ExternalLoginMessages.SetPasswordBeforeDisconnect
                 };
             }
 
@@ -1123,7 +1123,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = "The external identity provider did not return a valid account identifier."
+                    Message = ExternalLoginMessages.ProviderIdentityInvalid
                 };
             }
 
@@ -1154,7 +1154,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     return new LoginResponse
                     {
                         IsSuccess = false,
-                        Message = "This provider did not return a verified email address. Sign in using another linked method and review your connected accounts."
+                        Message = ExternalLoginMessages.ProviderEmailMissingForSignIn
                     };
                 }
 
@@ -1167,7 +1167,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     return new LoginResponse
                     {
                         IsSuccess = false,
-                        Message = "The email returned by this provider no longer matches the email on the linked XQARE account. Sign in using another linked method and review your connected accounts."
+                        Message = ExternalLoginMessages.ProviderEmailNoLongerMatches
                     };
                 }
 
@@ -1183,7 +1183,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     return new LoginResponse
                     {
                         IsSuccess = false,
-                        Message = "This provider did not supply a verified email address. Use email registration or an already-linked provider."
+                        Message = ExternalLoginMessages.ProviderEmailMissingForRegistration
                     };
                 }
 
@@ -1198,7 +1198,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     {
                         IsSuccess = false,
                         Email = existingUser.Email,
-                        Message = "An account already exists with this email. Sign in using your existing method before linking another provider."
+                        Message = ExternalLoginMessages.ExistingAccountForEmail
                     };
                 }
 
@@ -1208,7 +1208,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     return new LoginResponse
                     {
                         IsSuccess = false,
-                        Message = "The default Member role is not configured. Please contact support."
+                        Message = ExternalLoginMessages.DefaultMemberRoleMissing
                     };
                 }
 
@@ -1274,7 +1274,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                             {
                                 IsSuccess = false,
                                 Email = emailOwner.Email,
-                                Message = "An account already exists with this email. Sign in using your existing method before linking another provider."
+                                Message = ExternalLoginMessages.ExistingAccountForEmail
                             };
                         }
 
@@ -1299,7 +1299,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = "This account's email is not verified. Complete registration from the Register page first."
+                    Message = ExternalLoginMessages.EmailNotVerified
                 };
             }
 
@@ -2084,7 +2084,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             {
                 var memberRole = await _db.Roles.FirstOrDefaultAsync(x => x.Code == "MEMBER");
                 if (memberRole == null)
-                    return "The default Member role is not configured. Please contact support.";
+                    return ExternalLoginMessages.DefaultMemberRoleMissing;
 
                 _db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = memberRole.Id });
             }

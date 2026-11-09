@@ -23,4 +23,21 @@ public static class ExternalLoginMessages
     public const string TrustedCookieMfaOriginRequired = "A trusted request origin is required for cookie-based MFA verification.";
     public const string UntrustedOrigin = "Untrusted request origin.";
     public const string LogoutSuccess = "Logged out successfully";
+    public const string AccountCouldNotBeVerified = "The account could not be verified.";
+    public const string DefaultMemberRoleMissing = "The default Member role is not configured. Please contact support.";
+    public const string ConnectedMethodsRetrieved = "Connected sign-in methods retrieved.";
+    public const string ProviderIdentifierInvalid = "The external provider did not return a valid account identifier.";
+    public const string InvalidProviderService = "This sign-in provider is not supported.";
+    public const string SessionInactiveChange = "Your XQARE session is no longer active. Sign in again before changing connected accounts.";
+    public const string AccountCouldNotVerify = "The XQARE account could not be verified.";
+    public const string ProviderEmailUnverified = "This provider did not supply a verified email address. XQARE can only connect providers that return a verified matching email.";
+    public const string ProviderEmailMismatch = "The verified email on this provider account does not match your XQARE account email. Sign in to the XQARE account with that email before connecting this provider.";
+    public const string ProviderAlreadyConnected = "This provider account is already connected to another XQARE account.";
+    public const string SetPasswordBeforeDisconnect = "Set up email and password sign-in before disconnecting a provider.";
+    public const string ProviderIdentityInvalid = "The external identity provider did not return a valid account identifier.";
+    public const string ProviderEmailMissingForSignIn = "This provider did not return a verified email address. Sign in using another linked method and review your connected accounts.";
+    public const string ProviderEmailNoLongerMatches = "The email returned by this provider no longer matches the email on the linked XQARE account. Sign in using another linked method and review your connected accounts.";
+    public const string ProviderEmailMissingForRegistration = "This provider did not supply a verified email address. Use email registration or an already-linked provider.";
+    public const string ExistingAccountForEmail = "An account already exists with this email. Sign in using your existing method before linking another provider.";
+    public const string EmailNotVerified = "This account's email is not verified. Complete registration from the Register page first.";
 }
