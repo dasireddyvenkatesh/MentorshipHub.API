@@ -12,6 +12,10 @@ namespace MentorshipHub.API.Application.DTO.Admin
         public bool IsEmailConfirmed { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? LastLoginAt { get; set; }
+        public bool IsLockedOut { get; set; }
+        public DateTime? LockoutEndUtc { get; set; }
+        public int FailedLoginCount { get; set; }
+        public int LockoutLevel { get; set; }
         public List<string> Roles { get; set; } = new();
     }
 }
