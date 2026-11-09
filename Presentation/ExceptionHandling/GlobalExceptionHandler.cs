@@ -1,3 +1,4 @@
+using MentorshipHub.API.Constants.Messages;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -35,12 +36,12 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         var problem = new ProblemDetails
         {
             Status = StatusCodes.Status500InternalServerError,
-            Title = "An unexpected error occurred.",
+            Title = CommonMessages.UnexpectedErrorTitle,
             Type = "about:blank",
             Instance = httpContext.Request.Path
         };
         problem.Extensions["isSuccess"] = false;
-        problem.Extensions["message"] = "An unexpected error occurred. Please try again later.";
+        problem.Extensions["message"] = CommonMessages.UnexpectedError;
         problem.Extensions["traceId"] = httpContext.TraceIdentifier;
 
         await httpContext.Response.WriteAsJsonAsync(
