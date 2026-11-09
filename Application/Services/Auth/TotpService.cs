@@ -250,7 +250,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 .FromSqlInterpolated($@"SELECT * FROM ""TotpCredentials"" WHERE ""UserId"" = {userId} FOR UPDATE")
                 .FirstOrDefaultAsync();
             if (credential == null || !credential.IsEnabled)
-                throw new InvalidOperationException(MfaMessages.NotEnabled);
+                throw new InvalidOperationException(MfaMessages.NotEnabledForDisable);
 
             var now = DateTime.UtcNow;
             credential.IsEnabled = false;
