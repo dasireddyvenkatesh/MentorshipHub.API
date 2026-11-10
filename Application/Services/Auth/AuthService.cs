@@ -300,7 +300,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (!string.IsNullOrWhiteSpace(request.Password))
             {
                 // Password-based recovery reuses the normal lockout-protected validator.
-                var validation = await ValidatePasswordWithLockoutAsync(email, request.Password);
+                var validation = await ValidatePasswordWithLockoutAsync(email, request.Password, resetOnValidPassword: false);
                 user = validation.User;
                 if (!validation.IsValid)
                     return new ResponseDTO { IsSuccess = true, Message = MfaRecoveryGenericMessage };
@@ -632,7 +632,8 @@ namespace MentorshipHub.API.Application.Classes.Auth
         }
 
 
-        private async Task<(User? User, bool IsValid, int? RetryAfterSeconds)> ValidatePasswordWithLockoutAsync(string email, string password)
+        private async Task<(User? User, bool IsValid, int? RetryAfterSeconds)> ValidatePasswordWithLockoutAsync(
+            string email, string password, bool resetOnValidPassword = true)
         {
             await using var transaction = await _db.Database.BeginTransactionAsync();
             var lockKey = "login:" + email;
@@ -705,11 +706,15 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (_hasher.NeedsRehash(user.PasswordHash))
                 user.PasswordHash = _hasher.Hash(password);
 
-            // A successful primary factor resets consecutive password failures.
-            security.AccessFailedCount = 0;
-            security.LockoutEnd = null;
-            security.FailedLoginWindowStartedAt = null;
-            security.LockoutLevel = 0;
+            // A password-only success is not a completed sign-in when MFA is enabled.
+            // Preserve the progressive lockout history until the second factor succeeds.
+            if (resetOnValidPassword && security.MfaEnabled != true)
+            {
+                security.AccessFailedCount = 0;
+                security.LockoutEnd = null;
+                security.FailedLoginWindowStartedAt = null;
+                security.LockoutLevel = 0;
+            }
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
             return (user, true, null);
@@ -1681,6 +1686,18 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
 
             challenge.ConsumedAt = now;
+
+            // Serialize against password attempts using the same per-account lock.
+            // Reset progressive password lockout history only after MFA succeeds.
+            var loginLockKey = "login:" + user.Email.Trim().ToLowerInvariant();
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({loginLockKey}))");
+            await _db.Entry(user.SecuritySetting!).ReloadAsync();
+            user.SecuritySetting!.AccessFailedCount = 0;
+            user.SecuritySetting.LockoutEnd = null;
+            user.SecuritySetting.FailedLoginWindowStartedAt = null;
+            user.SecuritySetting.LockoutLevel = 0;
+
             var loginRequest = new LoginRequest { DeviceId = challenge.DeviceId ?? string.Empty, DeviceName = challenge.DeviceName };
             var response = await CreateSession(user, loginRequest);
             await _db.SaveChangesAsync();
