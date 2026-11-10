@@ -589,7 +589,7 @@ namespace MentorshipHub.API.Application.Classes.Auth
                     IsSuccess = false,
                     ErrorCode = "account_locked",
                     RetryAfterSeconds = passwordValidation.RetryAfterSeconds,
-                    Message = string.Format(AuthMessages.AccountLocked, Math.Ceiling(passwordValidation.RetryAfterSeconds.Value / 60d))
+                    Message = AuthMessages.AccountLockedFor(passwordValidation.RetryAfterSeconds.Value)
                 };
             }
 
@@ -1650,17 +1650,19 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
 
             var valid = false;
-            var failure = "The verification code is invalid.";
+            var failure = MfaMessages.InvalidVerificationCode;
+            int? retryAfterSeconds = null;
             if (challenge.Purpose == "totp" && (factor == "auto" || factor == "totp"))
             {
                 var result = await _totp.VerifyCodeAndConsumeAsync(user.Id, request.Code);
                 valid = result.IsValid;
                 failure = result.Message;
+                retryAfterSeconds = result.RetryAfterSeconds;
             }
             else if (challenge.Purpose == "totp" && factor == "recovery")
             {
                 valid = await _totp.ConsumeRecoveryCodeAsync(user.Id, request.Code);
-                failure = "The recovery code is invalid or has already been used.";
+                failure = MfaMessages.InvalidOrUsedRecoveryCode;
             }
             if (!valid)
             {
@@ -1671,7 +1673,10 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 return new LoginResponse
                 {
                     IsSuccess = false,
-                    Message = challenge.ConsumedAt.HasValue ? MfaMessages.TooManyChallengeAttempts : failure
+                    RetryAfterSeconds = retryAfterSeconds,
+                    Message = retryAfterSeconds.HasValue
+                        ? failure
+                        : challenge.ConsumedAt.HasValue ? MfaMessages.TooManyChallengeAttempts : failure
                 };
             }
 

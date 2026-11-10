@@ -3,7 +3,8 @@ namespace MentorshipHub.API.Constants.Messages;
 public static class AuthMessages
 {
     public const string CredentialsRequired = "Enter your email address and password to sign in.";
-    public const string AccountLocked = "This account is temporarily locked after multiple unsuccessful sign-in attempts. Try again in {0} minute(s).";
+    public static string AccountLockedFor(int retryAfterSeconds)
+        => $"This account is temporarily locked after multiple unsuccessful sign-in attempts. Try again in {CommonMessages.FormatDuration(retryAfterSeconds)}.";
     public const string InvalidCredentials = "The email address or password is incorrect. Check your details and try again.";
     public const string AccountInactive = "This account is currently inactive. Contact support if you think this is a mistake.";
     public const string EmailVerificationRequired = "Your registration is not complete. Choose Create one free to verify your email and set your password.";
@@ -37,13 +38,17 @@ public static class MfaMessages
     public const string ChallengeUnsupported = "This authenticator challenge is no longer supported. Sign in again.";
     public const string ChallengeInvalid = "The MFA challenge is no longer valid.";
     public const string TooManyChallengeAttempts = "Too many incorrect verification attempts. Sign in again to restart.";
+    public const string InvalidVerificationCode = "The verification code is invalid.";
+    public const string InvalidOrUsedRecoveryCode = "The recovery code is invalid or has already been used.";
 
     public const string EnrollmentUnavailable = "Authenticator enrollment is unavailable until a valid AES-256 TOTP encryption key is configured in the API application settings.";
     public const string AlreadyEnabled = "An authenticator is already enabled.";
     public const string ScanQrToFinishSetup = "Scan the QR code with your authenticator app, then enter the current six-digit code to finish setup.";
     public const string SetupExpired = "Your authenticator setup has expired. Start enrollment again.";
-    public const string SetupLocked = "Authenticator setup is temporarily locked. Try again later.";
-    public const string TooManySetupCodes = "Too many incorrect codes. Authenticator setup is temporarily locked.";
+    public static string SetupLockedFor(int retryAfterSeconds)
+        => $"Authenticator setup is temporarily locked. Try again in {CommonMessages.FormatDuration(retryAfterSeconds)}.";
+    public static string TooManySetupCodesFor(int retryAfterSeconds)
+        => $"Too many incorrect codes. Authenticator setup is temporarily locked. Try again in {CommonMessages.FormatDuration(retryAfterSeconds)}.";
     public const string IncorrectSetupCode = "The authenticator code is incorrect. Check your device time and try again.";
     public const string EnabledSuccessfully = "Authenticator enabled successfully. Save these recovery codes now; they will only be displayed once.";
     public const string StatusRetrieved = "Authenticator status retrieved.";
@@ -52,8 +57,10 @@ public static class MfaMessages
     public const string EnterValidSixDigitCode = "Enter a valid six-digit authenticator code.";
     public const string NotEnabled = "Authenticator is not enabled for this account.";
     public const string NotEnabledForDisable = "Authenticator is not enabled.";
-    public const string VerificationLocked = "Authenticator verification is temporarily locked. Try again later.";
-    public const string TooManyVerificationCodes = "Too many incorrect codes. Authenticator verification is temporarily locked.";
+    public static string VerificationLockedFor(int retryAfterSeconds)
+        => $"Authenticator verification is temporarily locked. Try again in {CommonMessages.FormatDuration(retryAfterSeconds)}.";
+    public static string TooManyVerificationCodesFor(int retryAfterSeconds)
+        => $"Too many incorrect codes. Authenticator verification is temporarily locked. Try again in {CommonMessages.FormatDuration(retryAfterSeconds)}.";
     public const string InvalidOrReusedCode = "The authenticator code is invalid or has already been used.";
     public const string CodeVerified = "Authenticator code verified.";
 }

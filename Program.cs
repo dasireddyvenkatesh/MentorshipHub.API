@@ -358,7 +358,7 @@ builder.Services.AddRateLimiter(options =>
                 code = "rate_limit_exceeded",
                 policy = policyName,
                 retryAfterSeconds,
-                message = CommonMessages.RateLimitExceeded
+                message = CommonMessages.RateLimitExceededFor(retryAfterSeconds)
             },
             cancellationToken);
     };

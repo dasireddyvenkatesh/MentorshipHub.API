@@ -12,5 +12,5 @@ namespace MentorshipHub.API.Application.Interfaces.Auth
         Task<bool> IsEnabledAsync(Guid userId);
         Task DisableAsync(Guid userId);
     }
-    public sealed record TotpVerificationResult(bool IsValid, string Message);
+    public sealed record TotpVerificationResult(bool IsValid, string Message, int? RetryAfterSeconds = null);
 }

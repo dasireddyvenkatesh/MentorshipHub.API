@@ -104,8 +104,16 @@ namespace MentorshipHub.API.Application.Classes.Auth
             if (credential?.PendingEncryptedSecret == null || credential.PendingEnrollmentExpiresAt == null ||
                 credential.PendingEnrollmentExpiresAt <= now)
                 return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.SetupExpired };
-            if (credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now)
-                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.SetupLocked };
+            var activeLockoutSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
+            if (activeLockoutSeconds.HasValue)
+            {
+                return new TotpEnrollmentConfirmResponse
+                {
+                    IsSuccess = false,
+                    Message = MfaMessages.SetupLockedFor(activeLockoutSeconds.Value),
+                    RetryAfterSeconds = activeLockoutSeconds.Value
+                };
+            }
 
             var pendingSecret = _protector.Unprotect(credential.PendingEncryptedSecret, userId);
             var matchedStep = FindMatchingTimeStep(pendingSecret, code, now);
@@ -114,12 +122,14 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 RegisterFailedAttempt(credential, now);
                 await _db.SaveChangesAsync();
                 if (transaction != null) await transaction.CommitAsync();
+                var retryAfterSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
                 return new TotpEnrollmentConfirmResponse
                 {
                     IsSuccess = false,
-                    Message = credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now
-                        ? MfaMessages.TooManySetupCodes
-                        : MfaMessages.IncorrectSetupCode
+                    Message = retryAfterSeconds.HasValue
+                        ? MfaMessages.TooManySetupCodesFor(retryAfterSeconds.Value)
+                        : MfaMessages.IncorrectSetupCode,
+                    RetryAfterSeconds = retryAfterSeconds
                 };
             }
 
@@ -169,7 +179,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
             await using var transaction = await BeginTransactionIfNeededAsync();
             var verification = await VerifyCodeAndConsumeAsync(userId, code);
             if (!verification.IsValid)
-                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = verification.Message };
+                return new TotpEnrollmentConfirmResponse
+                {
+                    IsSuccess = false,
+                    Message = verification.Message,
+                    RetryAfterSeconds = verification.RetryAfterSeconds
+                };
             var codes = await ReplaceRecoveryCodesAsync(userId, DateTime.UtcNow);
             await _db.SaveChangesAsync();
             if (transaction != null) await transaction.CommitAsync();
@@ -190,8 +205,12 @@ namespace MentorshipHub.API.Application.Classes.Auth
             var now = DateTime.UtcNow;
             if (credential?.IsEnabled != true || string.IsNullOrWhiteSpace(credential.EncryptedSecret))
                 return new TotpVerificationResult(false, MfaMessages.NotEnabled);
-            if (credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now)
-                return new TotpVerificationResult(false, MfaMessages.VerificationLocked);
+            var activeLockoutSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
+            if (activeLockoutSeconds.HasValue)
+                return new TotpVerificationResult(
+                    false,
+                    MfaMessages.VerificationLockedFor(activeLockoutSeconds.Value),
+                    activeLockoutSeconds.Value);
 
             var encryptedSecret = credential.EncryptedSecret;
             var secret = _protector.Unprotect(encryptedSecret, userId);
@@ -205,10 +224,13 @@ namespace MentorshipHub.API.Application.Classes.Auth
                 RegisterFailedAttempt(credential, now);
                 await _db.SaveChangesAsync();
                 if (transaction != null) await transaction.CommitAsync();
-                return new TotpVerificationResult(false,
-                    credential.LockoutEnd.HasValue && credential.LockoutEnd.Value > now
-                        ? MfaMessages.TooManyVerificationCodes
-                        : MfaMessages.InvalidOrReusedCode);
+                var retryAfterSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
+                return new TotpVerificationResult(
+                    false,
+                    retryAfterSeconds.HasValue
+                        ? MfaMessages.TooManyVerificationCodesFor(retryAfterSeconds.Value)
+                        : MfaMessages.InvalidOrReusedCode,
+                    retryAfterSeconds);
             }
 
             if (needsReprotection)
@@ -289,6 +311,11 @@ namespace MentorshipHub.API.Application.Classes.Auth
             }
             return result;
         }
+
+        private static int? GetRetryAfterSeconds(DateTime? lockoutEnd, DateTime now)
+            => lockoutEnd.HasValue && lockoutEnd.Value > now
+                ? Math.Max(1, (int)Math.Ceiling((lockoutEnd.Value - now).TotalSeconds))
+                : null;
 
         private static void RegisterFailedAttempt(TotpCredential credential, DateTime now)
         {
