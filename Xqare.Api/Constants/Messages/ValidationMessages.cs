@@ -1,4 +1,4 @@
-namespace MentorshipHub.API.Constants.Messages;
+namespace Xqare.Api.Constants.Messages;
 
 public static class ValidationMessages
 {

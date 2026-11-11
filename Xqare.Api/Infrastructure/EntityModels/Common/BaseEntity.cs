@@ -1,4 +1,4 @@
-﻿namespace MentorshipHub.API.Infrastructure.EntityModels.Common
+﻿namespace Xqare.Api.Infrastructure.EntityModels.Common
 {
     public class BaseEntity : IHasPublicId
     {

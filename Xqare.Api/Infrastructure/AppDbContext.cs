@@ -1,9 +1,9 @@
-﻿using MentorshipHub.API.Infrastructure.EntityModels.Identity;
-using MentorshipHub.API.Infrastructure.EntityModels.Profile;
-using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
+﻿using Xqare.Api.Infrastructure.EntityModels.Identity;
+using Xqare.Api.Infrastructure.EntityModels.Profile;
+using Xqare.Api.Infrastructure.EntityModels.Rbac;
 using Microsoft.EntityFrameworkCore;
 
-namespace MentorshipHub.API.Enities
+namespace Xqare.Api.Enities
 {
     public class AppDbContext : DbContext
     {
