@@ -1,4 +1,4 @@
-namespace MentorshipHub.API.Application.DTO.Auth
+namespace Xqare.Api.Application.DTO.Auth
 {
     /// <summary>
     /// Registration-only OTP request. Password and confirmation are collected
