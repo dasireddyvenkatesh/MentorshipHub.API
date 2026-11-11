@@ -1,4 +1,4 @@
-﻿namespace MentorshipHub.API.Application.DTO.ContactUs
+﻿namespace Xqare.Api.Application.DTO.ContactUs
 {
     public class ContactUsRequest
     {

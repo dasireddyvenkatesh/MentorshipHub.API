@@ -1,4 +1,4 @@
-﻿namespace MentorshipHub.API.Application.DTO.Common
+﻿namespace Xqare.Api.Application.DTO.Common
 {
     public class ResponseDTO
     {

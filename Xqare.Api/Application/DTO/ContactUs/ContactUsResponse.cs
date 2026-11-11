@@ -1,6 +1,6 @@
-﻿using MentorshipHub.API.Application.DTO.Common;
+﻿using Xqare.Api.Application.DTO.Common;
 
-namespace MentorshipHub.API.Application.DTO.ContactUs
+namespace Xqare.Api.Application.DTO.ContactUs
 {
     public class ContactUsResponse : ResponseDTO
     {
