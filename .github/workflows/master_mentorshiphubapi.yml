@@ -1,0 +1,64 @@
+# Production deployment workflow for the MentorshipHubAPI App Service.
+# Keeps the Production trigger, Azure identity, and App Service target.
+# Build paths updated for the renamed Xqare.Api solution/project.
+
+name: Build and deploy ASP.Net Core API to Azure Web App - MentorshipHubAPI
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Build solution
+        run: dotnet build Xqare.Api.slnx --configuration Release
+
+      - name: Publish API
+        run: dotnet publish Xqare.Api/Xqare.Api.csproj --configuration Release --no-build -o "${{env.DOTNET_ROOT}}/myapp"
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: .net-app
+          path: ${{env.DOTNET_ROOT}}/myapp
+
+  deploy:
+    runs-on: windows-latest
+    needs: build
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: .net-app
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_207199F3429543E488954FD8C184CEBB }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_747C7FB5C24341BA93AFA97343AD115F }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DFF1CBFA2195464E9F38A193F34485CD }}
+
+      - name: Deploy to Production App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'MentorshipHubAPI'
+          slot-name: 'Production'
+          package: .
