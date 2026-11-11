@@ -1,6 +1,6 @@
-using MentorshipHub.API.Application.DTO.Admin;
+using Xqare.Api.Application.DTO.Admin;
 
-namespace MentorshipHub.API.Application.Interfaces.Admin
+namespace Xqare.Api.Application.Interfaces.Admin
 {
     public interface IAdminService
     {

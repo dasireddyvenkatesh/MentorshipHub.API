@@ -1,6 +1,6 @@
-﻿using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+﻿using Xqare.Api.Infrastructure.EntityModels.Identity;
 
-namespace MentorshipHub.API.Application.Interfaces.Auth
+namespace Xqare.Api.Application.Interfaces.Auth
 {
     public interface IJwtTokenService
     {
