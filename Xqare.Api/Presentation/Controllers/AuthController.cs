@@ -31,7 +31,7 @@ namespace Xqare.Api.Presentation.Controllers
         private const string ExternalLinkProviderKey = "xqare:link-provider";
         private const string MfaRecoveryIntentKey = "xqare:mfa-recovery-intent";
         private const string MfaRecoveryEmailProofKey = "xqare:mfa-recovery-email-proof";
-        private const string MfaRecoveryTicketCookieName = "xqare_mfa_recovery_v1";
+        private const string MfaRecoveryTicketCookieName = "xqare_mfa_recovery_v2";
         private readonly IAuthService _authService;
         private readonly IUserSessionService _userSessionService;
         private readonly IOAuthUserMapper _oauthUserMapper;
@@ -53,8 +53,8 @@ namespace Xqare.Api.Presentation.Controllers
             _oauthUserMapper = oauthUserMapper;
             _env = env;
             _configuration = configuration;
-            _externalLinkTicketProtector = dataProtectionProvider.CreateProtector("XQARE.ExternalLoginLink.v1");
-            _mfaRecoveryTicketProtector = dataProtectionProvider.CreateProtector("XQARE.MfaRecoveryOAuth.v1");
+            _externalLinkTicketProtector = dataProtectionProvider.CreateProtector("XQARE.ExternalLoginLink.v2");
+            _mfaRecoveryTicketProtector = dataProtectionProvider.CreateProtector("XQARE.MfaRecoveryOAuth.v2");
         }
 
         private static CookieOptions RefreshTokenCookieOptions()
