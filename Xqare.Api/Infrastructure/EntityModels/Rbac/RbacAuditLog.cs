@@ -1,6 +1,6 @@
-using MentorshipHub.API.Infrastructure.EntityModels.Common;
+using Xqare.Api.Infrastructure.EntityModels.Common;
 
-namespace MentorshipHub.API.Infrastructure.EntityModels.Rbac
+namespace Xqare.Api.Infrastructure.EntityModels.Rbac
 {
     public class RbacAuditLog : BaseEntity
     {

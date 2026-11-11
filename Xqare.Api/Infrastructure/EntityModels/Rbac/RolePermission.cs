@@ -1,4 +1,4 @@
-﻿namespace MentorshipHub.API.Infrastructure.EntityModels.Rbac
+﻿namespace Xqare.Api.Infrastructure.EntityModels.Rbac
 {
     public class RolePermission
     {

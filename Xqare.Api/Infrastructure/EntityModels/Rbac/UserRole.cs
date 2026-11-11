@@ -1,6 +1,6 @@
-﻿using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+﻿using Xqare.Api.Infrastructure.EntityModels.Identity;
 
-namespace MentorshipHub.API.Infrastructure.EntityModels.Rbac
+namespace Xqare.Api.Infrastructure.EntityModels.Rbac
 {
     public class UserRole
     {
