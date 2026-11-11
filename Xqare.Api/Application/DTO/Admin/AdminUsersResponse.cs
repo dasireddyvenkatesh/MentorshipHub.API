@@ -1,4 +1,4 @@
-namespace MentorshipHub.API.Application.DTO.Admin
+namespace Xqare.Api.Application.DTO.Admin
 {
     public sealed class AdminUsersResponse
     {
