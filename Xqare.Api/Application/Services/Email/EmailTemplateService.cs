@@ -1,8 +1,8 @@
-using MentorshipHub.API.Application.Interfaces.Email;
+using Xqare.Api.Application.Interfaces.Email;
 using System.Text;
 using System.Text.Encodings.Web;
 
-namespace MentorshipHub.API.Application.Services.Email
+namespace Xqare.Api.Application.Services.Email
 {
     public class EmailTemplateService : IEmailTemplateService
     {

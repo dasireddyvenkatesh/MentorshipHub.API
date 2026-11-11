@@ -1,12 +1,12 @@
-using MentorshipHub.API.Application.DTO.Profile;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.Interfaces.Profile;
-using MentorshipHub.API.Enities;
-using MentorshipHub.API.Infrastructure.EntityModels.Profile;
-using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+using Xqare.Api.Application.DTO.Profile;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.Interfaces.Profile;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Profile;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace MentorshipHub.API.Application.Services.Profile
+namespace Xqare.Api.Application.Services.Profile
 {
     public sealed class ProfileService : IProfileService
     {

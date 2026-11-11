@@ -1,9 +1,9 @@
 using System.Security.Claims;
-using MentorshipHub.API.Application.Interfaces.Rbac;
-using MentorshipHub.API.Enities;
-using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
+using Xqare.Api.Application.Interfaces.Rbac;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Rbac;
 
-namespace MentorshipHub.API.Application.Services.Rbac
+namespace Xqare.Api.Application.Services.Rbac
 {
     public sealed class RbacAuditService : IRbacAuditService
     {
