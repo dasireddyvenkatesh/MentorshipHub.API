@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace MentorshipHub.API.Application.DTO.Email
+namespace Xqare.Api.Application.DTO.Email
 {
     public class EmailMessageModel
     {

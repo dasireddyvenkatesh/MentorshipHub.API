@@ -1,4 +1,4 @@
-namespace MentorshipHub.API.Application.DTO.Rbac
+namespace Xqare.Api.Application.DTO.Rbac
 {
     public sealed class CreateRoleRequest
     {

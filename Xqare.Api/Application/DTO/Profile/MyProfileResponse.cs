@@ -1,4 +1,4 @@
-namespace MentorshipHub.API.Application.DTO.Profile
+namespace Xqare.Api.Application.DTO.Profile
 {
     public sealed class MyProfileResponse
     {
