@@ -63,7 +63,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // ASP.NET Core Data Protection remains enabled for OAuth authentication cookies.
 // TOTP secrets use only versioned AES-256-GCM keys from Totp:EncryptionKeys.
 var dataProtectionBuilder = builder.Services.AddDataProtection()
-    .SetApplicationName("XQARE.Xqare.Api.v2");
+    .SetApplicationName("XQARE.Api.v2");
 
 var appServiceHome = Environment.GetEnvironmentVariable("HOME");
 if (!string.IsNullOrWhiteSpace(appServiceHome))
@@ -404,9 +404,9 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "XQARE MentorshipHub API",
+        Title = "XQARE API",
         Version = "v1",
-        Description = "API documentation for the XQARE MentorshipHub platform."
+        Description = "API documentation for the XQARE platform."
     });
 
     // Swagger UI accepts the raw JWT and sends it as an Authorization: Bearer header.
@@ -448,10 +448,10 @@ if (swaggerEnabled)
 
     app.UseSwaggerUI(options =>
     {
-        options.SwaggerEndpoint("/openapi/v1.json", "XQARE MentorshipHub API v1");
+        options.SwaggerEndpoint("/openapi/v1.json", "XQARE API v1");
         // Serve Swagger UI directly from the application root.
         options.RoutePrefix = string.Empty;
-        options.DocumentTitle = "XQARE MentorshipHub API";
+        options.DocumentTitle = "XQARE API";
         options.DisplayRequestDuration();
         // Do not persist authorization tokens across browser sessions.
     });
