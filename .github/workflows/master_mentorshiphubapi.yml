@@ -40,7 +40,6 @@ jobs:
           path: ${{env.DOTNET_ROOT}}/myapp
 
   deploy:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     needs: build
     permissions:
