@@ -39,7 +39,6 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text;
 using System.Net;
-using MentorshipHub.API.Presentation.ExceptionHandling;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -424,16 +423,12 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());
 
-builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-// Keep the exception handler outermost so failures in downstream middleware
-// and controller execution use the same non-sensitive Problem Details response.
-app.UseExceptionHandler();
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
