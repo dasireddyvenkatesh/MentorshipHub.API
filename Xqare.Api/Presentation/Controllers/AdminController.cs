@@ -1,10 +1,10 @@
-using MentorshipHub.API.Application.DTO.Admin;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.Interfaces.Admin;
+using Xqare.Api.Application.DTO.Admin;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.Interfaces.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace MentorshipHub.API.Presentation.Controllers
+namespace Xqare.Api.Presentation.Controllers
 {
     [ApiController]
     [Authorize]

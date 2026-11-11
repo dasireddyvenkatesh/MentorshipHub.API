@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 
-namespace MentorshipHub.API.Presentation.Authorization
+namespace Xqare.Api.Presentation.Authorization
 {
     public sealed class PermissionRequirement : IAuthorizationRequirement
     {
