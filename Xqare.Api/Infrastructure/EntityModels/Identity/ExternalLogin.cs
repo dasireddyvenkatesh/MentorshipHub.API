@@ -1,6 +1,6 @@
-﻿using MentorshipHub.API.Infrastructure.EntityModels.Common;
+﻿using Xqare.Api.Infrastructure.EntityModels.Common;
 
-namespace MentorshipHub.API.Infrastructure.EntityModels.Identity
+namespace Xqare.Api.Infrastructure.EntityModels.Identity
 {
     public class ExternalLogin : BaseEntity
     {
