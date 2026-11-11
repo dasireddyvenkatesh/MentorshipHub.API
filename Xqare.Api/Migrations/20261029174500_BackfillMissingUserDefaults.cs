@@ -1,9 +1,9 @@
-using MentorshipHub.API.Enities;
+using Xqare.Api.Enities;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace MentorshipHub.API.Migrations
+namespace Xqare.Api.Migrations
 {
     public partial class BackfillMissingUserDefaults : Migration
     {
