@@ -1,8 +1,8 @@
 using FluentValidation;
-using MentorshipHub.API.Application.DTO.Auth;
-using MentorshipHub.API.Application.DTO.Rbac;
+using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.DTO.Rbac;
 
-namespace MentorshipHub.API.Application.Validators;
+namespace Xqare.Api.Application.Validators;
 
 /// <summary>
 /// FluentValidation rules for request DTOs introduced by the MFA recovery and

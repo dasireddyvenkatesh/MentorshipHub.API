@@ -1,4 +1,4 @@
-namespace MentorshipHub.API.Application.Validators;
+namespace Xqare.Api.Application.Validators;
 
 public static class NameValidationRules
 {

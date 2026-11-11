@@ -1,13 +1,13 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using MentorshipHub.API.Application.DTO.Rbac;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.Interfaces.Rbac;
-using MentorshipHub.API.Enities;
-using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
+using Xqare.Api.Application.DTO.Rbac;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.Interfaces.Rbac;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Rbac;
 using Microsoft.EntityFrameworkCore;
 
-namespace MentorshipHub.API.Application.Services.Rbac
+namespace Xqare.Api.Application.Services.Rbac
 {
     public sealed class RbacService : IRbacService
     {

@@ -1,8 +1,8 @@
 using FluentValidation;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.DTO.Auth;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.DTO.Auth;
 
-namespace MentorshipHub.API.Application.Validators;
+namespace Xqare.Api.Application.Validators;
 
 public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest>
 {
