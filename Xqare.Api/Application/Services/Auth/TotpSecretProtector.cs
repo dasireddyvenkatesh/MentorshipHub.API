@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using MentorshipHub.API.Application.Interfaces.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
 
-namespace MentorshipHub.API.Application.Classes.Auth
+namespace Xqare.Api.Application.Classes.Auth
 {
     /// <summary>
     /// Protects TOTP secrets exclusively with versioned AES-256-GCM keys.

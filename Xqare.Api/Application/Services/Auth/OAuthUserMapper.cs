@@ -1,9 +1,9 @@
-﻿using MentorshipHub.API.Application.DTO.Auth;
-using MentorshipHub.API.Application.Interfaces.Auth;
+﻿using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
 using Microsoft.AspNetCore.Authentication;
 using System.Security.Claims;
 
-namespace MentorshipHub.API.Application.Services.Auth
+namespace Xqare.Api.Application.Services.Auth
 {
     public class OAuthUserMapper : IOAuthUserMapper
     {

@@ -1,14 +1,14 @@
-﻿using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.DTO.Auth;
-using MentorshipHub.API.Application.Interfaces.Auth;
-using MentorshipHub.API.Application.Interfaces.Email;
-using MentorshipHub.API.Enities;
-using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+﻿using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
+using Xqare.Api.Application.Interfaces.Email;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 
-namespace MentorshipHub.API.Application.Classes.Auth
+namespace Xqare.Api.Application.Classes.Auth
 {
     public class OtpService : IOtpService
     {

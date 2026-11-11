@@ -1,7 +1,7 @@
 using System.Text;
-using MentorshipHub.API.Application.Interfaces.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
 
-namespace MentorshipHub.API.Application.Classes.Auth
+namespace Xqare.Api.Application.Classes.Auth
 {
     public class PasswordHasher : IPasswordHasher
     {
