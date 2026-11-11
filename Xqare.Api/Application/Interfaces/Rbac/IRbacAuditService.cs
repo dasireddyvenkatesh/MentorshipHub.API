@@ -1,6 +1,6 @@
-using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
+using Xqare.Api.Infrastructure.EntityModels.Rbac;
 
-namespace MentorshipHub.API.Application.Interfaces.Rbac
+namespace Xqare.Api.Application.Interfaces.Rbac
 {
     public interface IRbacAuditService
     {

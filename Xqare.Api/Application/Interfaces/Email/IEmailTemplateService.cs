@@ -1,4 +1,4 @@
-﻿namespace MentorshipHub.API.Application.Interfaces.Email
+﻿namespace Xqare.Api.Application.Interfaces.Email
 {
     public interface IEmailTemplateService
     {

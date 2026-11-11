@@ -1,6 +1,6 @@
-using MentorshipHub.API.Application.DTO.Profile;
+using Xqare.Api.Application.DTO.Profile;
 
-namespace MentorshipHub.API.Application.Interfaces.Profile
+namespace Xqare.Api.Application.Interfaces.Profile
 {
     public interface IProfileService
     {
