@@ -1,13 +1,13 @@
-﻿using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.DTO.Auth;
-using MentorshipHub.API.Application.DTO.Common;
-using MentorshipHub.API.Application.Interfaces.Auth;
-using MentorshipHub.API.Application.Interfaces.Email;
-using MentorshipHub.API.Application.Interfaces.Commom;
-using MentorshipHub.API.Enities;
-using MentorshipHub.API.Infrastructure.EntityModels.Identity;
-using MentorshipHub.API.Infrastructure.EntityModels.Profile;
-using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
+﻿using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.DTO.Common;
+using Xqare.Api.Application.Interfaces.Auth;
+using Xqare.Api.Application.Interfaces.Email;
+using Xqare.Api.Application.Interfaces.Commom;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
+using Xqare.Api.Infrastructure.EntityModels.Profile;
+using Xqare.Api.Infrastructure.EntityModels.Rbac;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using System.ComponentModel.DataAnnotations;
@@ -15,7 +15,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.WebUtilities;
 
-namespace MentorshipHub.API.Application.Classes.Auth
+namespace Xqare.Api.Application.Classes.Auth
 {
     public class AuthService : IAuthService
     {

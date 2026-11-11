@@ -1,12 +1,12 @@
-﻿using MentorshipHub.API.Application.Interfaces.Auth;
-using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+﻿using Xqare.Api.Application.Interfaces.Auth;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace MentorshipHub.API.Application.Classes.Auth
+namespace Xqare.Api.Application.Classes.Auth
 {
     public class JwtTokenService : IJwtTokenService
     {

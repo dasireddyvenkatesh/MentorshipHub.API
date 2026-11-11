@@ -1,10 +1,10 @@
-using MentorshipHub.API.Application.DTO.Admin;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.Interfaces.Admin;
-using MentorshipHub.API.Enities;
+using Xqare.Api.Application.DTO.Admin;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.Interfaces.Admin;
+using Xqare.Api.Enities;
 using Microsoft.EntityFrameworkCore;
 
-namespace MentorshipHub.API.Application.Services.Admin
+namespace Xqare.Api.Application.Services.Admin
 {
     public sealed class AdminService : IAdminService
     {

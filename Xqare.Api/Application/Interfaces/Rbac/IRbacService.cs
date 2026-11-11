@@ -1,6 +1,6 @@
-using MentorshipHub.API.Application.DTO.Rbac;
+using Xqare.Api.Application.DTO.Rbac;
 
-namespace MentorshipHub.API.Application.Interfaces.Rbac
+namespace Xqare.Api.Application.Interfaces.Rbac
 {
     public interface IRbacService
     {
