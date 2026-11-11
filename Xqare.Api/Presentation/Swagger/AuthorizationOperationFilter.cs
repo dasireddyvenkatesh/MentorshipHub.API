@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace MentorshipHub.API.Presentation.Swagger;
+namespace Xqare.Api.Presentation.Swagger;
 
 /// <summary>
 /// Documents the API's global fallback authorization policy in OpenAPI.

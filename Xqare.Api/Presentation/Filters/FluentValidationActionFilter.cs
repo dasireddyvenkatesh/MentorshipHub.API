@@ -2,7 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
-namespace MentorshipHub.API.Presentation.Filters;
+namespace Xqare.Api.Presentation.Filters;
 
 /// <summary>
 /// Runs the registered FluentValidation validator for each action argument before

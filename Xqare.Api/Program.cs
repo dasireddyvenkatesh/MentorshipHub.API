@@ -1,28 +1,28 @@
 using FluentValidation;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.Classes.Auth;
-using MentorshipHub.API.Application.DTO.Auth;
-using MentorshipHub.API.Application.DTO.ContactUs;
-using MentorshipHub.API.Application.DTO.Profile;
-using MentorshipHub.API.Application.DTO.Rbac;
-using MentorshipHub.API.Application.Validators;
-using MentorshipHub.API.Presentation.Filters;
-using MentorshipHub.API.Presentation.Authorization;
-using MentorshipHub.API.Application.Classes.Common;
-using MentorshipHub.API.Application.Interfaces.Auth;
-using MentorshipHub.API.Application.Interfaces.Admin;
-using MentorshipHub.API.Application.Interfaces.Commom;
-using MentorshipHub.API.Application.Interfaces.Contact;
-using MentorshipHub.API.Application.Interfaces.Profile;
-using MentorshipHub.API.Application.Interfaces.Rbac;
-using MentorshipHub.API.Application.Interfaces.Email;
-using MentorshipHub.API.Application.Services.Auth;
-using MentorshipHub.API.Application.Services.Admin;
-using MentorshipHub.API.Application.Services.Contact;
-using MentorshipHub.API.Application.Services.Profile;
-using MentorshipHub.API.Application.Services.Rbac;
-using MentorshipHub.API.Application.Services.Email;
-using MentorshipHub.API.Enities;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.Classes.Auth;
+using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.DTO.ContactUs;
+using Xqare.Api.Application.DTO.Profile;
+using Xqare.Api.Application.DTO.Rbac;
+using Xqare.Api.Application.Validators;
+using Xqare.Api.Presentation.Filters;
+using Xqare.Api.Presentation.Authorization;
+using Xqare.Api.Application.Classes.Common;
+using Xqare.Api.Application.Interfaces.Auth;
+using Xqare.Api.Application.Interfaces.Admin;
+using Xqare.Api.Application.Interfaces.Commom;
+using Xqare.Api.Application.Interfaces.Contact;
+using Xqare.Api.Application.Interfaces.Profile;
+using Xqare.Api.Application.Interfaces.Rbac;
+using Xqare.Api.Application.Interfaces.Email;
+using Xqare.Api.Application.Services.Auth;
+using Xqare.Api.Application.Services.Admin;
+using Xqare.Api.Application.Services.Contact;
+using Xqare.Api.Application.Services.Profile;
+using Xqare.Api.Application.Services.Rbac;
+using Xqare.Api.Application.Services.Email;
+using Xqare.Api.Enities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -31,7 +31,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
-using MentorshipHub.API.Presentation.Swagger;
+using Xqare.Api.Presentation.Swagger;
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -63,7 +63,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // ASP.NET Core Data Protection remains enabled for OAuth authentication cookies.
 // TOTP secrets use only versioned AES-256-GCM keys from Totp:EncryptionKeys.
 var dataProtectionBuilder = builder.Services.AddDataProtection()
-    .SetApplicationName("XQARE.MentorshipHub.API.v2");
+    .SetApplicationName("XQARE.Xqare.Api.v2");
 
 var appServiceHome = Environment.GetEnvironmentVariable("HOME");
 if (!string.IsNullOrWhiteSpace(appServiceHome))
