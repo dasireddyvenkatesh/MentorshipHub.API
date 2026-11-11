@@ -1,8 +1,8 @@
-﻿using MentorshipHub.API.Constants.Messages;
+﻿using Xqare.Api.Constants.Messages;
 using AspNet.Security.OAuth.GitHub;
 using AspNet.Security.OAuth.LinkedIn;
-using MentorshipHub.API.Application.DTO.Auth;
-using MentorshipHub.API.Application.Interfaces.Auth;
+using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -15,7 +15,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace MentorshipHub.API.Presentation.Controllers
+namespace Xqare.Api.Presentation.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -388,7 +388,7 @@ namespace MentorshipHub.API.Presentation.Controllers
             var protectedTicket = _externalLinkTicketProtector.Protect(JsonSerializer.Serialize(ticket));
             Response.Cookies.Append(ExternalLinkTicketCookieName, protectedTicket, ExternalLinkTicketCookieOptions());
 
-            return Ok(new MentorshipHub.API.Application.DTO.Common.ResponseDTO
+            return Ok(new Xqare.Api.Application.DTO.Common.ResponseDTO
             {
                 IsSuccess = true,
                 Message = ExternalLoginMessages.ContinueConnect

@@ -1,12 +1,12 @@
 using System.Security.Claims;
-using MentorshipHub.API.Application.DTO.Profile;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.Interfaces.Profile;
-using MentorshipHub.API.Application.Validators;
+using Xqare.Api.Application.DTO.Profile;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.Interfaces.Profile;
+using Xqare.Api.Application.Validators;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace MentorshipHub.API.Presentation.Controllers
+namespace Xqare.Api.Presentation.Controllers
 {
     [ApiController]
     [Authorize]

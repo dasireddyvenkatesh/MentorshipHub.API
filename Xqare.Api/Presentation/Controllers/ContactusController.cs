@@ -1,10 +1,10 @@
-﻿using MentorshipHub.API.Application.DTO.ContactUs;
-using MentorshipHub.API.Application.Interfaces.Contact;
+﻿using Xqare.Api.Application.DTO.ContactUs;
+using Xqare.Api.Application.Interfaces.Contact;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 
-namespace MentorshipHub.API.Presentation.Controllers
+namespace Xqare.Api.Presentation.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

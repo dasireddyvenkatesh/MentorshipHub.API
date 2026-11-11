@@ -1,10 +1,10 @@
 using System.Security.Claims;
-using MentorshipHub.API.Application.DTO.Rbac;
-using MentorshipHub.API.Application.Interfaces.Rbac;
+using Xqare.Api.Application.DTO.Rbac;
+using Xqare.Api.Application.Interfaces.Rbac;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace MentorshipHub.API.Presentation.Controllers
+namespace Xqare.Api.Presentation.Controllers
 {
     [ApiController]
     [Authorize]
