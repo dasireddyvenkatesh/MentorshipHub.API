@@ -1,8 +1,8 @@
-﻿using MentorshipHub.API.Infrastructure.EntityModels.Common;
-using MentorshipHub.API.Infrastructure.EntityModels.Profile;
-using MentorshipHub.API.Infrastructure.EntityModels.Rbac;
+﻿using Xqare.Api.Infrastructure.EntityModels.Common;
+using Xqare.Api.Infrastructure.EntityModels.Profile;
+using Xqare.Api.Infrastructure.EntityModels.Rbac;
 
-namespace MentorshipHub.API.Infrastructure.EntityModels.Identity
+namespace Xqare.Api.Infrastructure.EntityModels.Identity
 {
     public class User : BaseEntity
     {

@@ -1,7 +1,7 @@
-using MentorshipHub.API.Infrastructure.EntityModels.Common;
-using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+using Xqare.Api.Infrastructure.EntityModels.Common;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
 
-namespace MentorshipHub.API.Infrastructure.EntityModels.Identity
+namespace Xqare.Api.Infrastructure.EntityModels.Identity
 {
     public class TotpCredential : BaseEntity
     {
