@@ -4,6 +4,7 @@ using MentorshipHub.API.Application.Classes.Auth;
 using MentorshipHub.API.Application.DTO.Auth;
 using MentorshipHub.API.Application.DTO.ContactUs;
 using MentorshipHub.API.Application.DTO.Profile;
+using MentorshipHub.API.Application.DTO.Rbac;
 using MentorshipHub.API.Application.Validators;
 using MentorshipHub.API.Presentation.Filters;
 using MentorshipHub.API.Presentation.Authorization;
