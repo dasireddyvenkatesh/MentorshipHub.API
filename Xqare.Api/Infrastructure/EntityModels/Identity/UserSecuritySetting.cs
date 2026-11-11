@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace MentorshipHub.API.Infrastructure.EntityModels.Identity
+namespace Xqare.Api.Infrastructure.EntityModels.Identity
 {
     public class UserSecuritySetting
     {

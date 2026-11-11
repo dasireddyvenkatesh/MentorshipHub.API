@@ -1,7 +1,7 @@
-﻿using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+﻿using Xqare.Api.Infrastructure.EntityModels.Identity;
 using System.ComponentModel.DataAnnotations;
 
-namespace MentorshipHub.API.Infrastructure.EntityModels.Profile
+namespace Xqare.Api.Infrastructure.EntityModels.Profile
 {
     public class UserProfile
     {
