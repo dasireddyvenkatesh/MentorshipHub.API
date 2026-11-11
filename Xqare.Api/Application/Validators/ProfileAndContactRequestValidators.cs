@@ -1,9 +1,9 @@
 using FluentValidation;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.DTO.ContactUs;
-using MentorshipHub.API.Application.DTO.Profile;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.DTO.ContactUs;
+using Xqare.Api.Application.DTO.Profile;
 
-namespace MentorshipHub.API.Application.Validators;
+namespace Xqare.Api.Application.Validators;
 
 public sealed class UpdateMyProfileRequestValidator : AbstractValidator<UpdateMyProfileRequest>
 {
