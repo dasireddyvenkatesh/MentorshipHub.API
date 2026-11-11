@@ -2,7 +2,7 @@
 # Keeps the Production trigger, Azure identity, and App Service target.
 # Build paths updated for the renamed Xqare.Api solution/project.
 
-name: Build and deploy ASP.Net Core API to Azure Web App - MentorshipHubAPI
+name: XQARE API - Production Deployment
 
 on:
   push:
