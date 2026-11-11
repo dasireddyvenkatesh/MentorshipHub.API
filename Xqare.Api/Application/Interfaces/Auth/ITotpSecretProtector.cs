@@ -1,4 +1,4 @@
-namespace MentorshipHub.API.Application.Interfaces.Auth
+namespace Xqare.Api.Application.Interfaces.Auth
 {
     public interface ITotpSecretProtector
     {
