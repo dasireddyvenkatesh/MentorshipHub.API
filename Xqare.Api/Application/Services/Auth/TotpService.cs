@@ -1,16 +1,16 @@
-﻿using MentorshipHub.API.Constants.Messages;
+﻿using Xqare.Api.Constants.Messages;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using MentorshipHub.API.Application.DTO.Auth;
-using MentorshipHub.API.Application.Interfaces.Auth;
-using MentorshipHub.API.Enities;
-using MentorshipHub.API.Infrastructure.EntityModels.Identity;
+using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using QRCoder;
 
-namespace MentorshipHub.API.Application.Classes.Auth
+namespace Xqare.Api.Application.Classes.Auth
 {
     public sealed class TotpService : ITotpService
     {

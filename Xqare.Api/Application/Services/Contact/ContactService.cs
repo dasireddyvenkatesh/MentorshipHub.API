@@ -1,10 +1,10 @@
-﻿using MentorshipHub.API.Application.DTO.ContactUs;
-using MentorshipHub.API.Constants.Messages;
-using MentorshipHub.API.Application.Interfaces.Contact;
-using MentorshipHub.API.Application.Interfaces.Email;
+﻿using Xqare.Api.Application.DTO.ContactUs;
+using Xqare.Api.Constants.Messages;
+using Xqare.Api.Application.Interfaces.Contact;
+using Xqare.Api.Application.Interfaces.Email;
 using System.Text;
 
-namespace MentorshipHub.API.Application.Services.Contact
+namespace Xqare.Api.Application.Services.Contact
 {
     public class ContactService : IContactService
     {

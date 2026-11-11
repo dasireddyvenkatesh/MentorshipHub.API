@@ -1,7 +1,7 @@
-﻿using MentorshipHub.API.Application.Interfaces.Commom;
+﻿using Xqare.Api.Application.Interfaces.Commom;
 using Sqids;
 
-namespace MentorshipHub.API.Application.Classes.Common
+namespace Xqare.Api.Application.Classes.Common
 {
     public class SqidsService : IPublicIdService
     {
