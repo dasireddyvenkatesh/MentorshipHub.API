@@ -1,0 +1,249 @@
+using Xqare.Api.Application.Interfaces.Email;
+using System.Text;
+using System.Text.Encodings.Web;
+
+namespace Xqare.Api.Application.Services.Email
+{
+    public class EmailTemplateService : IEmailTemplateService
+    {
+        // Encode every dynamic value before inserting it into an HTML email.
+        // Email subjects are headers, so remove CR/LF to prevent header injection.
+        private static string Encode(string? value)
+            => HtmlEncoder.Default.Encode(value ?? string.Empty);
+
+        private static string SafeEmailSubject(string? value)
+            => (value ?? string.Empty)
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Trim();
+        public (string subject, string body) BuildRegistrationOtp(string firstName, string otpCode)
+        {
+            string subject = "Your XQARE Email Verification Code";
+
+            var sb = new StringBuilder();
+
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html>");
+            sb.Append("<body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+
+            sb.Append("<h2 style='color:#333;'>Verify your email</h2>");
+
+            sb.Append($"<p>Hi {Encode(firstName)},</p>");
+
+            sb.Append("<p>");
+            sb.Append("To complete your registration on <strong>XQARE</strong>, please use the verification code below.");
+            sb.Append("</p>");
+
+            sb.Append("<div style='font-size:30px;font-weight:bold;letter-spacing:5px;text-align:center;margin:30px 0;'>");
+            sb.Append(Encode(otpCode));
+            sb.Append("</div>");
+
+            sb.Append("<p>This code will expire in <strong>10 minutes</strong>.</p>");
+
+            sb.Append("<p style='color:#777;'>For security reasons, please do not share this code with anyone.</p>");
+
+            sb.Append("<p style='color:#999;'>If you did not request this code, you can safely ignore this email.</p>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+
+            sb.Append("</div>");
+            sb.Append("</body>");
+            sb.Append("</html>");
+
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) BuildResendOtp(string firstName, string otpCode)
+        {
+            string subject = "Resend verification code for XQARE";
+
+            var sb = new StringBuilder();
+
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html>");
+            sb.Append("<body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+
+            sb.Append("<h2 style='color:#333;'>Your new verification code</h2>");
+
+            sb.Append($"<p>Hi {Encode(firstName)},</p>");
+
+            sb.Append("<p>You requested a new verification code for your <strong>XQARE</strong> account.</p>");
+
+            sb.Append("<p>Please use the code below to verify your email:</p>");
+
+            sb.Append("<div style='font-size:32px;font-weight:bold;letter-spacing:6px;text-align:center;margin:30px 0;'>");
+            sb.Append(Encode(otpCode));
+            sb.Append("</div>");
+
+            sb.Append("<p>This code will expire in <strong>10 minutes</strong>.</p>");
+
+            sb.Append("<p style='color:#777;'>For security reasons, please do not share this code with anyone.</p>");
+
+            sb.Append("<p style='color:#999;'>If you did not request this code, you can safely ignore this email.</p>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+
+            sb.Append("</div>");
+            sb.Append("</body>");
+            sb.Append("</html>");
+
+            return (subject, sb.ToString());
+        }
+
+
+        public (string subject, string body) BuildMfaAccountRecoveryOtp(string firstName, string otpCode)
+        {
+            const string subject = "XQARE – Account Recovery Verification Code";
+            var safeName = Encode(string.IsNullOrWhiteSpace(firstName) ? "there" : firstName);
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html><html><body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+            sb.Append("<h2 style='color:#0f2a44;'>Verify your account recovery</h2>");
+            sb.Append($"<p>Hi {safeName},</p>");
+            sb.Append("<p>We received a request to recover access to your XQARE account because the authenticator and recovery codes may no longer be available.</p>");
+            sb.Append("<p>Enter this verification code to continue:</p>");
+            sb.Append("<div style='font-size:30px;font-weight:bold;letter-spacing:5px;text-align:center;margin:30px 0;'>");
+            sb.Append(Encode(otpCode));
+            sb.Append("</div>");
+            sb.Append("<p>This code expires in <strong>10 minutes</strong> and can be used only once.</p>");
+            sb.Append("<p style='color:#777;'>Never share this code with anyone. XQARE support will never ask you to disclose it.</p>");
+            sb.Append("<p style='color:#777;'>If you did not request account recovery, do not use this code. You can ignore this email; your authenticator settings will not be changed by this email alone.</p>");
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+            sb.Append("</div></body></html>");
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) BuildMfaAccountRecoveryCompleted(string firstName)
+        {
+            const string subject = "XQARE – MFA Account Recovery Completed";
+            var safeName = Encode(string.IsNullOrWhiteSpace(firstName) ? "there" : firstName);
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html><html><body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+            sb.Append("<h2 style='color:#0f2a44;'>Your account security settings were updated</h2>");
+            sb.Append($"<p>Hi {safeName},</p>");
+            sb.Append("<p>MFA account recovery for your XQARE account has been completed.</p>");
+            sb.Append("<p>Your previous authenticator and unused recovery codes have been invalidated, and all existing sessions were signed out. A new authenticator was enrolled and new recovery codes were generated.</p>");
+            sb.Append("<p style='color:#777;'>If you did not perform this recovery, contact XQARE support immediately and secure the email account associated with your XQARE account.</p>");
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+            sb.Append("</div></body></html>");
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) BuildPasswordReset(string firstName, string resetUrl)
+        {
+            const string subject = "Reset your XQARE password";
+            var safeName = Encode(string.IsNullOrWhiteSpace(firstName) ? "there" : firstName);
+            var safeUrl = Encode(resetUrl);
+
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html><body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+            sb.Append("<h2 style='color:#0f2a44;'>Reset your password</h2>");
+            sb.Append($"<p>Hi {safeName},</p>");
+            sb.Append("<p>We received a request to reset the password for your XQARE account.</p>");
+            sb.Append($"<p style='text-align:center;margin:30px 0;'><a href='{safeUrl}' style='display:inline-block;background:#f59e0b;color:white;text-decoration:none;padding:14px 24px;border-radius:8px;font-weight:bold;'>Reset Password</a></p>");
+            sb.Append("<p>This link expires in <strong>15 minutes</strong> and can be used only once.</p>");
+            sb.Append("<p style='color:#777;'>If the button does not work, copy and paste this link into your browser:</p>");
+            sb.Append($"<p style='word-break:break-all;color:#475569;'>{safeUrl}</p>");
+            sb.Append("<p style='color:#777;'>If you did not request a password reset, you can safely ignore this email. Your current password will remain unchanged.</p>");
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+            sb.Append("</div></body></html>");
+
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) ContactUsCustomerTemplate(string firstName)
+        {
+            string subject = "We received your request - XQARE";
+
+            var sb = new StringBuilder();
+
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html>");
+            sb.Append("<body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+
+            sb.Append("<h2 style='color:#333;'>Thank you for contacting us</h2>");
+
+            sb.Append($"<p>Hi {Encode(firstName)},</p>");
+
+            sb.Append("<p>Thank you for reaching out to <strong>XQARE</strong>. We have received your request and our support team will review it shortly.</p>");
+
+            sb.Append("<p>Our team usually responds within <strong>24 - 48 hours</strong>.</p>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p style='color:#777;'>This is an automated confirmation email to let you know that your message has been received.</p>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p>Best regards,<br><strong>Team XQARE</strong></p>");
+
+            sb.Append("</div>");
+            sb.Append("</body>");
+            sb.Append("</html>");
+
+            return (subject, sb.ToString());
+        }
+
+        public (string subject, string body) ContactUsSupportTemplate(string firstName, string email, string subject, string message)
+        {
+            var safeSubject = SafeEmailSubject(subject);
+            subject = $"New Contact Request - {safeSubject}";
+
+            var sb = new StringBuilder();
+
+            sb.Append("<!DOCTYPE html>");
+            sb.Append("<html>");
+            sb.Append("<body style='font-family:Arial,Helvetica,sans-serif;background:#f5f7fa;padding:30px;'>");
+
+            sb.Append("<div style='max-width:500px;background:white;margin:auto;padding:30px;border-radius:8px;'>");
+
+            sb.Append($"<h2 style='color:#333;'>{Encode(safeSubject)}</h2>");
+
+            sb.Append("<p>You have received a new contact request from the website.</p>");
+
+            sb.Append("<table style='width:100%;border-collapse:collapse;margin-top:20px;'>");
+
+            sb.Append("<tr>");
+            sb.Append("<td style='padding:8px;font-weight:bold;'>Name:</td>");
+            sb.Append($"<td style='padding:8px;'>{Encode(firstName)}</td>");
+            sb.Append("</tr>");
+
+            sb.Append("<tr>");
+            sb.Append("<td style='padding:8px;font-weight:bold;'>Email:</td>");
+            sb.Append($"<td style='padding:8px;'>{Encode(email)}</td>");
+            sb.Append("</tr>");
+
+            sb.Append("<tr>");
+            sb.Append("<td style='padding:8px;font-weight:bold;'>Message:</td>");
+            sb.Append($"<td style='padding:8px;white-space:pre-wrap;'>{Encode(message)}</td>");
+            sb.Append("</tr>");
+
+            sb.Append("</table>");
+
+            sb.Append("<br>");
+
+            sb.Append("<p style='color:#777;'>Please respond to this request as soon as possible.</p>");
+
+            sb.Append("<p>Best regards,<br><strong>XQARE Website</strong></p>");
+
+            sb.Append("</div>");
+            sb.Append("</body>");
+            sb.Append("</html>");
+
+            return (subject, sb.ToString());
+        }
+    }
+}

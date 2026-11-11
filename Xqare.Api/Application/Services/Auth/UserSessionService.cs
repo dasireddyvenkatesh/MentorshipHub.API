@@ -1,0 +1,246 @@
+﻿using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
+using Microsoft.EntityFrameworkCore;
+
+namespace Xqare.Api.Application.Classes.Auth
+{
+    public class UserSessionService : IUserSessionService
+    {
+        private static readonly TimeSpan RefreshWindow = TimeSpan.FromDays(7);
+        private static readonly TimeSpan MaximumSessionAge = TimeSpan.FromDays(30);
+        private const int MaxActiveSessions = 2;
+        private readonly AppDbContext _db;
+        private readonly IJwtTokenService _jwt;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
+        public UserSessionService(AppDbContext db, IJwtTokenService jwt, IHttpContextAccessor httpContextAccessor)
+        {
+            _db = db;
+            _jwt = jwt;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        // Use the address normalized by ASP.NET Core Forwarded Headers middleware.
+        // Never read X-Forwarded-For directly: that request header can be client-controlled.
+        private string GetClientIpAddress()
+        {
+            var address = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress;
+            if (address == null)
+                return string.Empty;
+
+            if (address.IsIPv4MappedToIPv6)
+                address = address.MapToIPv4();
+
+            // Do not manufacture an IPv4 value from a native IPv6 connection.
+            return address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                ? address.ToString()
+                : string.Empty;
+        }
+
+        public async Task<UserSession?> GetByTokenAsync(string refreshToken)
+        {
+            var hash = _jwt.Hash(refreshToken);
+
+            return await _db.UserSessions
+                .Include(x => x.User)
+                .FirstOrDefaultAsync(x => x.RefreshTokenHash == hash);
+        }
+
+        public async Task CreateAsync(UserSession session)
+        {
+            _db.UserSessions.Add(session);
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task RotateAsync(UserSession session, string newRefreshToken)
+        {
+            var now = DateTime.UtcNow;
+            var absoluteExpiry = session.CreatedAt.Add(MaximumSessionAge);
+
+            session.RefreshTokenHash = _jwt.Hash(newRefreshToken);
+            session.ExpiresAt = now.Add(RefreshWindow) < absoluteExpiry
+                ? now.Add(RefreshWindow)
+                : absoluteExpiry;
+            session.LastActivityAt = now;
+
+            var currentIpAddress = GetClientIpAddress();
+            if (!string.IsNullOrWhiteSpace(currentIpAddress))
+                session.IpAddress = currentIpAddress;
+
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task RevokeAsync(string refreshToken)
+        {
+            var hash = _jwt.Hash(refreshToken);
+
+            var session = await _db.UserSessions
+                .FirstOrDefaultAsync(x => x.RefreshTokenHash == hash);
+
+            if (session == null) return;
+
+            session.IsRevoked = true;
+            session.RevokedAt = DateTime.UtcNow;
+            session.LastActivityAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task<List<UserSession>> GetActiveSessionsAsync(Guid userId, Guid currentSessionId)
+        {
+            var currentIpAddress = GetClientIpAddress();
+            if (!string.IsNullOrWhiteSpace(currentIpAddress))
+            {
+                var currentSession = await _db.UserSessions.FirstOrDefaultAsync(x =>
+                    x.Id == currentSessionId &&
+                    x.UserId == userId &&
+                    !x.IsRevoked &&
+                    x.RevokedAt == null);
+
+                if (currentSession != null &&
+                    !string.Equals(currentSession.IpAddress, currentIpAddress, StringComparison.Ordinal))
+                {
+                    currentSession.IpAddress = currentIpAddress;
+                    currentSession.LastActivityAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
+            }
+
+            var now = DateTime.UtcNow;
+            return await _db.UserSessions.AsNoTracking()
+                .Where(x => x.UserId == userId &&
+                            !x.IsRevoked &&
+                            x.RevokedAt == null &&
+                            x.ExpiresAt > now)
+                .OrderByDescending(x => x.LastActivityAt ?? x.CreatedAt)
+                .ThenByDescending(x => x.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<bool> RevokeSessionAsync(Guid userId, Guid sessionId)
+        {
+            var session = await _db.UserSessions.FirstOrDefaultAsync(x =>
+                x.Id == sessionId &&
+                x.UserId == userId &&
+                !x.IsRevoked &&
+                x.RevokedAt == null);
+
+            if (session == null)
+                return false;
+
+            var now = DateTime.UtcNow;
+            session.IsRevoked = true;
+            session.RevokedAt = now;
+            session.LastActivityAt = now;
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        public Task<int> RevokeOtherSessionsAsync(Guid userId, Guid currentSessionId)
+        {
+            var now = DateTime.UtcNow;
+            return _db.UserSessions
+                .Where(x => x.UserId == userId &&
+                            x.Id != currentSessionId &&
+                            !x.IsRevoked &&
+                            x.RevokedAt == null &&
+                            x.ExpiresAt > now)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.IsRevoked, true)
+                    .SetProperty(x => x.RevokedAt, now)
+                    .SetProperty(x => x.LastActivityAt, now));
+        }
+
+        public async Task<Guid> HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken)
+        {
+            // Serialize logins for one account so concurrent requests cannot exceed the cap.
+            // MFA verification already owns a transaction while it locks/consumes the
+            // challenge and TOTP credential. Reuse it instead of opening a nested
+            // transaction on the same DbContext connection.
+            await using var transaction = _db.Database.CurrentTransaction == null
+                ? await _db.Database.BeginTransactionAsync()
+                : null;
+
+            var lockKey = "session:" + userId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+
+            var now = DateTime.UtcNow;
+            var activeSessions = await _db.UserSessions
+                .Where(x => x.UserId == userId &&
+                            !x.IsRevoked &&
+                            x.RevokedAt == null &&
+                            x.ExpiresAt > now)
+                .OrderByDescending(x => x.LastActivityAt ?? x.CreatedAt)
+                .ThenByDescending(x => x.CreatedAt)
+                .ToListAsync();
+
+            var context = _httpContextAccessor.HttpContext;
+            var ipAddress = GetClientIpAddress();
+            var userAgent = context?.Request.Headers["User-Agent"].FirstOrDefault() ?? string.Empty;
+            var requestedDeviceId = request.DeviceId ?? string.Empty;
+            var currentSession = activeSessions.FirstOrDefault(x => x.DeviceId == requestedDeviceId);
+
+            if (currentSession != null)
+            {
+                // Re-authentication on an already-active device reuses that session slot.
+                currentSession.CreatedAt = now;
+                currentSession.RefreshTokenHash = _jwt.Hash(refreshToken);
+                currentSession.ExpiresAt = now.Add(RefreshWindow);
+                currentSession.DeviceName = request.DeviceName ?? currentSession.DeviceName;
+                currentSession.IpAddress = ipAddress;
+                currentSession.UserAgent = userAgent;
+                currentSession.LastActivityAt = now;
+            }
+            else
+            {
+                currentSession = new UserSession
+                {
+                    UserId = userId,
+                    CreatedAt = now,
+                    DeviceId = requestedDeviceId,
+                    DeviceName = request.DeviceName ?? string.Empty,
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent,
+                    RefreshTokenHash = _jwt.Hash(refreshToken),
+                    ExpiresAt = now.Add(RefreshWindow),
+                    LastActivityAt = now
+                };
+                _db.UserSessions.Add(currentSession);
+            }
+
+            var user = await _db.Users.FindAsync(userId);
+            if (user != null)
+                user.LastLoginAt = now;
+
+            await _db.SaveChangesAsync();
+
+            // Keep the two most recently active sessions. Older sessions are revoked
+            // atomically so their sid-bound access tokens fail on subsequent API requests.
+            var sessionsAfterLogin = await _db.UserSessions
+                .Where(x => x.UserId == userId &&
+                            !x.IsRevoked &&
+                            x.RevokedAt == null &&
+                            x.ExpiresAt > now)
+                .OrderByDescending(x => x.LastActivityAt ?? x.CreatedAt)
+                .ThenByDescending(x => x.CreatedAt)
+                .ToListAsync();
+
+            foreach (var excess in sessionsAfterLogin.Skip(MaxActiveSessions))
+            {
+                excess.IsRevoked = true;
+                excess.RevokedAt = now;
+                excess.LastActivityAt = now;
+            }
+
+            await _db.SaveChangesAsync();
+            if (transaction != null)
+                await transaction.CommitAsync();
+
+            return currentSession.Id;
+        }
+
+    }
+}

@@ -1,0 +1,411 @@
+﻿using Xqare.Api.Constants.Messages;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Application.Interfaces.Auth;
+using Xqare.Api.Enities;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using QRCoder;
+
+namespace Xqare.Api.Application.Classes.Auth
+{
+    public sealed class TotpService : ITotpService
+    {
+        private const string Issuer = "XQARE";
+        private const int PeriodSeconds = 30;
+        private const int MaxFailedAttempts = 5;
+        private static readonly TimeSpan FailedWindow = TimeSpan.FromMinutes(15);
+        private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+        private static readonly char[] Base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".ToCharArray();
+        private readonly AppDbContext _db;
+        private readonly ITotpSecretProtector _protector;
+
+        public TotpService(AppDbContext db, ITotpSecretProtector protector)
+        {
+            _db = db;
+            _protector = protector;
+        }
+
+        public Task<bool> IsEnabledAsync(Guid userId)
+            => _db.TotpCredentials.AnyAsync(x => x.UserId == userId && x.IsEnabled);
+
+        public async Task<TotpEnrollmentStartResponse> StartEnrollmentAsync(Guid userId, string email, bool allowReplace = false)
+        {
+            if (!_protector.IsProtectionConfigured)
+            {
+                return new TotpEnrollmentStartResponse
+                {
+                    IsSuccess = false,
+                    Message = MfaMessages.EnrollmentUnavailable
+                };
+            }
+
+            await using var transaction = await BeginTransactionIfNeededAsync();
+            var lockKey = "totp:" + userId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+            var credential = await _db.TotpCredentials
+                .FromSqlInterpolated($@"SELECT * FROM ""TotpCredentials"" WHERE ""UserId"" = {userId} FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            if (credential?.IsEnabled == true && !allowReplace)
+                return new TotpEnrollmentStartResponse { IsSuccess = false, Message = MfaMessages.AlreadyEnabled };
+
+            var secret = Base32Encode(RandomNumberGenerator.GetBytes(20));
+            var now = DateTime.UtcNow;
+            if (credential == null)
+            {
+                credential = new TotpCredential
+                {
+                    UserId = userId, IsEnabled = false,
+                    PendingEncryptedSecret = _protector.Protect(secret, userId),
+                    PendingEnrollmentExpiresAt = now.AddMinutes(10)
+                };
+                _db.TotpCredentials.Add(credential);
+            }
+            else
+            {
+                credential.PendingEncryptedSecret = _protector.Protect(secret, userId);
+                credential.PendingEnrollmentExpiresAt = now.AddMinutes(10);
+            }
+
+            await _db.SaveChangesAsync();
+            if (transaction != null) await transaction.CommitAsync();
+
+            var label = Uri.EscapeDataString($"{Issuer}:{email.Trim()}");
+            var issuer = Uri.EscapeDataString(Issuer);
+            var uri = $"otpauth://totp/{label}?secret={secret}&issuer={issuer}&algorithm=SHA1&digits=6&period=30";
+            var qrGenerator = new QRCodeGenerator();
+            var qrData = qrGenerator.CreateQrCode(uri, QRCodeGenerator.ECCLevel.Q);
+            var qrBytes = new PngByteQRCode(qrData).GetGraphic(8);
+            var qrDataUri = "data:image/png;base64," + Convert.ToBase64String(qrBytes);
+            return new TotpEnrollmentStartResponse
+            {
+                IsSuccess = true, Message = MfaMessages.ScanQrToFinishSetup,
+                Secret = secret, ProvisioningUri = uri, QrCodeDataUri = qrDataUri
+            };
+        }
+
+        public async Task<TotpEnrollmentConfirmResponse> ConfirmEnrollmentAsync(Guid userId, string code)
+        {
+            if (!IsSixDigitCode(code))
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.EnterSixDigitCode };
+
+            await using var transaction = await BeginTransactionIfNeededAsync();
+            var lockKey = "totp:" + userId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+            var credential = await _db.TotpCredentials
+                .FromSqlInterpolated($@"SELECT * FROM ""TotpCredentials"" WHERE ""UserId"" = {userId} FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            var now = DateTime.UtcNow;
+            if (credential?.PendingEncryptedSecret == null || credential.PendingEnrollmentExpiresAt == null ||
+                credential.PendingEnrollmentExpiresAt <= now)
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.SetupExpired };
+            var activeLockoutSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
+            if (activeLockoutSeconds.HasValue)
+            {
+                return new TotpEnrollmentConfirmResponse
+                {
+                    IsSuccess = false,
+                    Message = MfaMessages.SetupLockedFor(activeLockoutSeconds.Value),
+                    RetryAfterSeconds = activeLockoutSeconds.Value
+                };
+            }
+
+            var pendingSecret = _protector.Unprotect(credential.PendingEncryptedSecret, userId);
+            var matchedStep = FindMatchingTimeStep(pendingSecret, code, now);
+            if (matchedStep == null)
+            {
+                RegisterFailedAttempt(credential, now);
+                await _db.SaveChangesAsync();
+                if (transaction != null) await transaction.CommitAsync();
+                var retryAfterSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
+                return new TotpEnrollmentConfirmResponse
+                {
+                    IsSuccess = false,
+                    Message = retryAfterSeconds.HasValue
+                        ? MfaMessages.TooManySetupCodesFor(retryAfterSeconds.Value)
+                        : MfaMessages.IncorrectSetupCode,
+                    RetryAfterSeconds = retryAfterSeconds
+                };
+            }
+
+            credential.EncryptedSecret = _protector.Protect(pendingSecret, userId);
+            credential.PendingEncryptedSecret = null;
+            credential.PendingEnrollmentExpiresAt = null;
+            credential.IsEnabled = true;
+            credential.EnabledAt = now;
+            credential.DisabledAt = null;
+            credential.LastAcceptedTimeStep = matchedStep.Value;
+            credential.FailedAttemptCount = 0;
+            credential.FailedAttemptWindowStartedAt = null;
+            credential.LockoutEnd = null;
+
+            var settings = await _db.UserSecuritySettings.FirstOrDefaultAsync(x => x.UserId == userId);
+            if (settings == null) _db.UserSecuritySettings.Add(new UserSecuritySetting { UserId = userId, MfaEnabled = true });
+            else settings.MfaEnabled = true;
+
+            var codes = await ReplaceRecoveryCodesAsync(userId, now);
+            await _db.SaveChangesAsync();
+            if (transaction != null) await transaction.CommitAsync();
+            return new TotpEnrollmentConfirmResponse
+            {
+                IsSuccess = true, Message = MfaMessages.EnabledSuccessfully,
+                RecoveryCodes = codes
+            };
+        }
+
+        public async Task<TotpStatusResponse> GetStatusAsync(Guid userId)
+        {
+            var credential = await _db.TotpCredentials.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId);
+            var remaining = await _db.MfaRecoveryCodes.CountAsync(x =>
+                x.UserId == userId && x.UsedAt == null && x.InvalidatedAt == null);
+            return new TotpStatusResponse
+            {
+                IsSuccess = true, Message = MfaMessages.StatusRetrieved,
+                IsEnabled = credential?.IsEnabled == true, CanEnroll = _protector.IsProtectionConfigured,
+                EnabledAt = credential?.EnabledAt,
+                RecoveryCodesRemaining = remaining
+            };
+        }
+
+        public async Task<TotpEnrollmentConfirmResponse> RegenerateRecoveryCodesAsync(Guid userId, string code)
+        {
+            if (!IsSixDigitCode(code))
+                return new TotpEnrollmentConfirmResponse { IsSuccess = false, Message = MfaMessages.EnterCurrentSixDigitCode };
+            await using var transaction = await BeginTransactionIfNeededAsync();
+            var verification = await VerifyCodeAndConsumeAsync(userId, code);
+            if (!verification.IsValid)
+                return new TotpEnrollmentConfirmResponse
+                {
+                    IsSuccess = false,
+                    Message = verification.Message,
+                    RetryAfterSeconds = verification.RetryAfterSeconds
+                };
+            var codes = await ReplaceRecoveryCodesAsync(userId, DateTime.UtcNow);
+            await _db.SaveChangesAsync();
+            if (transaction != null) await transaction.CommitAsync();
+            return new TotpEnrollmentConfirmResponse
+            {
+                IsSuccess = true, Message = MfaMessages.RecoveryCodesRegenerated,
+                RecoveryCodes = codes
+            };
+        }
+
+        public async Task<TotpVerificationResult> VerifyCodeAndConsumeAsync(Guid userId, string code)
+        {
+            if (!IsSixDigitCode(code)) return new TotpVerificationResult(false, MfaMessages.EnterValidSixDigitCode);
+            await using var transaction = await BeginTransactionIfNeededAsync();
+            var credential = await _db.TotpCredentials
+                .FromSqlInterpolated($@"SELECT * FROM ""TotpCredentials"" WHERE ""UserId"" = {userId} FOR UPDATE")
+                .FirstOrDefaultAsync();
+            var now = DateTime.UtcNow;
+            if (credential?.IsEnabled != true || string.IsNullOrWhiteSpace(credential.EncryptedSecret))
+                return new TotpVerificationResult(false, MfaMessages.NotEnabled);
+            var activeLockoutSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
+            if (activeLockoutSeconds.HasValue)
+                return new TotpVerificationResult(
+                    false,
+                    MfaMessages.VerificationLockedFor(activeLockoutSeconds.Value),
+                    activeLockoutSeconds.Value);
+
+            var encryptedSecret = credential.EncryptedSecret;
+            var secret = _protector.Unprotect(encryptedSecret, userId);
+            var step = FindMatchingTimeStep(secret, code, now);
+            var needsReprotection = _protector.IsProtectionConfigured && !_protector.IsUsingActiveKey(encryptedSecret);
+            if (step == null || (credential.LastAcceptedTimeStep.HasValue && step.Value <= credential.LastAcceptedTimeStep.Value))
+            {
+                if (needsReprotection)
+                    credential.EncryptedSecret = _protector.Protect(secret, userId);
+
+                RegisterFailedAttempt(credential, now);
+                await _db.SaveChangesAsync();
+                if (transaction != null) await transaction.CommitAsync();
+                var retryAfterSeconds = GetRetryAfterSeconds(credential.LockoutEnd, now);
+                return new TotpVerificationResult(
+                    false,
+                    retryAfterSeconds.HasValue
+                        ? MfaMessages.TooManyVerificationCodesFor(retryAfterSeconds.Value)
+                        : MfaMessages.InvalidOrReusedCode,
+                    retryAfterSeconds);
+            }
+
+            if (needsReprotection)
+                credential.EncryptedSecret = _protector.Protect(secret, userId);
+
+            credential.LastAcceptedTimeStep = step.Value;
+            credential.FailedAttemptCount = 0;
+            credential.FailedAttemptWindowStartedAt = null;
+            credential.LockoutEnd = null;
+            await _db.SaveChangesAsync();
+            if (transaction != null) await transaction.CommitAsync();
+            return new TotpVerificationResult(true, MfaMessages.CodeVerified);
+        }
+
+        public async Task<bool> ConsumeRecoveryCodeAsync(Guid userId, string code)
+        {
+            var normalized = NormalizeCode(code);
+            if (normalized.Length < 20) return false;
+            await using var transaction = await BeginTransactionIfNeededAsync();
+            var hash = HashCode(normalized);
+            var record = await _db.MfaRecoveryCodes
+                .FromSqlInterpolated($@"SELECT * FROM ""MfaRecoveryCodes""
+                    WHERE ""UserId"" = {userId} AND ""CodeHash"" = {hash}
+                    AND ""UsedAt"" IS NULL AND ""InvalidatedAt"" IS NULL FOR UPDATE")
+                .FirstOrDefaultAsync();
+            if (record == null) return false;
+            record.UsedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            if (transaction != null) await transaction.CommitAsync();
+            return true;
+        }
+
+        public async Task DisableAsync(Guid userId)
+        {
+            await using var transaction = await BeginTransactionIfNeededAsync();
+            var lockKey = "totp:" + userId.ToString("N");
+            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({lockKey}))");
+            var credential = await _db.TotpCredentials
+                .FromSqlInterpolated($@"SELECT * FROM ""TotpCredentials"" WHERE ""UserId"" = {userId} FOR UPDATE")
+                .FirstOrDefaultAsync();
+            if (credential == null || !credential.IsEnabled)
+                throw new InvalidOperationException(MfaMessages.NotEnabledForDisable);
+
+            var now = DateTime.UtcNow;
+            credential.IsEnabled = false;
+            credential.EncryptedSecret = null;
+            credential.PendingEncryptedSecret = null;
+            credential.PendingEnrollmentExpiresAt = null;
+            credential.DisabledAt = now;
+            credential.LastAcceptedTimeStep = null;
+            credential.FailedAttemptCount = 0;
+            credential.FailedAttemptWindowStartedAt = null;
+            credential.LockoutEnd = null;
+            var settings = await _db.UserSecuritySettings.FirstOrDefaultAsync(x => x.UserId == userId);
+            if (settings != null) settings.MfaEnabled = false;
+            var codes = await _db.MfaRecoveryCodes
+                .Where(x => x.UserId == userId && x.UsedAt == null && x.InvalidatedAt == null).ToListAsync();
+            foreach (var item in codes) item.InvalidatedAt = now;
+            await _db.SaveChangesAsync();
+            if (transaction != null) await transaction.CommitAsync();
+        }
+
+        private async Task<List<string>> ReplaceRecoveryCodesAsync(Guid userId, DateTime now)
+        {
+            var active = await _db.MfaRecoveryCodes
+                .Where(x => x.UserId == userId && x.UsedAt == null && x.InvalidatedAt == null).ToListAsync();
+            foreach (var item in active) item.InvalidatedAt = now;
+            var batch = Guid.NewGuid();
+            var result = new List<string>(10);
+            for (var i = 0; i < 10; i++)
+            {
+                var code = FormatCode(Base32Encode(RandomNumberGenerator.GetBytes(16)));
+                result.Add(code);
+                _db.MfaRecoveryCodes.Add(new MfaRecoveryCode
+                {
+                    UserId = userId, BatchId = batch, CodeHash = HashCode(NormalizeCode(code))
+                });
+            }
+            return result;
+        }
+
+        private static int? GetRetryAfterSeconds(DateTime? lockoutEnd, DateTime now)
+            => lockoutEnd.HasValue && lockoutEnd.Value > now
+                ? Math.Max(1, (int)Math.Ceiling((lockoutEnd.Value - now).TotalSeconds))
+                : null;
+
+        private static void RegisterFailedAttempt(TotpCredential credential, DateTime now)
+        {
+            if (credential.FailedAttemptWindowStartedAt == null ||
+                credential.FailedAttemptWindowStartedAt.Value.Add(FailedWindow) <= now)
+            {
+                credential.FailedAttemptWindowStartedAt = now;
+                credential.FailedAttemptCount = 0;
+                credential.LockoutEnd = null;
+            }
+            credential.FailedAttemptCount++;
+            if (credential.FailedAttemptCount >= MaxFailedAttempts) credential.LockoutEnd = now.Add(LockoutDuration);
+        }
+
+        private static bool IsSixDigitCode(string? value)
+            => value is { Length: 6 } && value.All(c => c is >= '0' and <= '9');
+
+        private static long? FindMatchingTimeStep(string secret, string code, DateTime now)
+        {
+            var current = new DateTimeOffset(DateTime.SpecifyKind(now, DateTimeKind.Utc)).ToUnixTimeSeconds() / PeriodSeconds;
+            for (var step = current - 1; step <= current + 1; step++)
+            {
+                if (step < 0) continue;
+                var expected = GenerateCode(secret, step);
+                if (CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(expected), Encoding.ASCII.GetBytes(code)))
+                    return step;
+            }
+            return null;
+        }
+
+        private static string GenerateCode(string secret, long step)
+        {
+            var counter = BitConverter.GetBytes(step);
+            if (BitConverter.IsLittleEndian) Array.Reverse(counter);
+            using var hmac = new HMACSHA1(Base32Decode(secret));
+            var hash = hmac.ComputeHash(counter);
+            var offset = hash[^1] & 0x0F;
+            var binary = ((hash[offset] & 0x7f) << 24) |
+                         ((hash[offset + 1] & 0xff) << 16) |
+                         ((hash[offset + 2] & 0xff) << 8) |
+                         (hash[offset + 3] & 0xff);
+            return (binary % 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
+        }
+
+        private static string Base32Encode(byte[] data)
+        {
+            var builder = new StringBuilder((data.Length * 8 + 4) / 5);
+            var buffer = 0;
+            var bits = 0;
+            foreach (var value in data)
+            {
+                buffer = (buffer << 8) | value;
+                bits += 8;
+                while (bits >= 5)
+                {
+                    builder.Append(Base32Alphabet[(buffer >> (bits - 5)) & 31]);
+                    bits -= 5;
+                }
+            }
+            if (bits > 0) builder.Append(Base32Alphabet[(buffer << (5 - bits)) & 31]);
+            return builder.ToString();
+        }
+
+        private static byte[] Base32Decode(string value)
+        {
+            var result = new List<byte>();
+            var buffer = 0;
+            var bits = 0;
+            foreach (var character in value.TrimEnd('=').ToUpperInvariant())
+            {
+                var index = Array.IndexOf(Base32Alphabet, character);
+                if (index < 0) throw new FormatException("Invalid Base32 secret.");
+                buffer = (buffer << 5) | index;
+                bits += 5;
+                if (bits >= 8)
+                {
+                    result.Add((byte)((buffer >> (bits - 8)) & 0xff));
+                    bits -= 8;
+                }
+            }
+            return result.ToArray();
+        }
+
+        private static string NormalizeCode(string? input)
+            => new((input ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+        private static string FormatCode(string value)
+            => string.Join("-", Enumerable.Range(0, (value.Length + 3) / 4).Select(i => value.Substring(i * 4, Math.Min(4, value.Length - i * 4))));
+        private static string HashCode(string value)
+            => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+        private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync()
+            => _db.Database.CurrentTransaction == null ? await _db.Database.BeginTransactionAsync() : null;
+    }
+}

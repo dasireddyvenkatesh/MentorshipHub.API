@@ -1,0 +1,18 @@
+﻿using Xqare.Api.Application.DTO.Auth;
+using Xqare.Api.Infrastructure.EntityModels.Identity;
+
+namespace Xqare.Api.Application.Interfaces.Auth
+{
+    public interface IUserSessionService
+    {
+        Task<UserSession?> GetByTokenAsync(string refreshToken);
+        Task CreateAsync(UserSession session);
+        Task RotateAsync(UserSession session, string newRefreshToken);
+        Task RevokeAsync(string refreshToken);
+        Task<List<UserSession>> GetActiveSessionsAsync(Guid userId, Guid currentSessionId);
+        Task<bool> RevokeSessionAsync(Guid userId, Guid sessionId);
+        Task<int> RevokeOtherSessionsAsync(Guid userId, Guid currentSessionId);
+        Task<Guid> HandleLoginSessionAsync(Guid userId, LoginRequest request, string refreshToken);
+
+    }
+}

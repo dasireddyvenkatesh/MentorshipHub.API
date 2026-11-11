@@ -1,10 +1,14 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# Production deployment workflow for the MentorshipHubAPI App Service.
+# Keeps the Production trigger, Azure identity, and App Service target.
+# Build paths updated for the renamed Xqare.Api solution/project.
 
-name: Build and deploy ASP.Net Core app to Azure Web App - MentorshipHubAPI
+name: Build and deploy ASP.Net Core API to Azure Web App - MentorshipHubAPI
 
 on:
   push:
+    branches:
+      - master
+  pull_request:
     branches:
       - master
   workflow_dispatch:
@@ -13,21 +17,21 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up .NET Core
+      - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.x'
 
-      - name: Build with dotnet
-        run: dotnet build --configuration Release
+      - name: Build solution
+        run: dotnet build Xqare.Api.slnx --configuration Release
 
-      - name: dotnet publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+      - name: Publish API
+        run: dotnet publish Xqare.Api/Xqare.Api.csproj --configuration Release --no-build -o "${{env.DOTNET_ROOT}}/myapp"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -36,18 +40,19 @@ jobs:
           path: ${{env.DOTNET_ROOT}}/myapp
 
   deploy:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     needs: build
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: .net-app
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -55,11 +60,9 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_747C7FB5C24341BA93AFA97343AD115F }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_DFF1CBFA2195464E9F38A193F34485CD }}
 
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
+      - name: Deploy to Production App Service
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'MentorshipHubAPI'
           slot-name: 'Production'
           package: .
-          

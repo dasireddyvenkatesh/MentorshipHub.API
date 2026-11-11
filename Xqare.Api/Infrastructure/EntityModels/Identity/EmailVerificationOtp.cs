@@ -1,0 +1,23 @@
+﻿using Xqare.Api.Infrastructure.EntityModels.Common;
+
+namespace Xqare.Api.Infrastructure.EntityModels.Identity
+{
+    public class EmailVerificationOtp : BaseEntity
+    {
+        public string Email { get; set; }
+        public string CodeHash { get; set; }
+
+        public int AttemptCount { get; set; }
+        public int MaxAttempts { get; set; } = 3;
+
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? LockedUntil { get; set; }
+
+        public bool IsUsed { get; set; }
+
+        public int HourlySendCount { get; set; }
+        public DateTime? HourlyWindowStartedAt { get; set; }
+        public int DailySendCount { get; set; }
+        public DateTime? DailyWindowStartedAt { get; set; }
+    }
+}
