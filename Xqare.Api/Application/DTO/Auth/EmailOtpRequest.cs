@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace MentorshipHub.API.Application.DTO.Auth
+namespace Xqare.Api.Application.DTO.Auth
 {
     public class EmailOtpRequest
     {

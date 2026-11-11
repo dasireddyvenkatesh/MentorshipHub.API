@@ -1,6 +1,6 @@
-﻿using MentorshipHub.API.Application.DTO.Common;
+﻿using Xqare.Api.Application.DTO.Common;
 
-namespace MentorshipHub.API.Application.DTO.Auth
+namespace Xqare.Api.Application.DTO.Auth
 {
     public class EmailOtpResponse : ResponseDTO
     {
