@@ -39,8 +39,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text;
 using System.Net;
-// TEMPORARILY DISABLED: Global exception handling will be investigated separately.
-// using MentorshipHub.API.Presentation.ExceptionHandling;
+using MentorshipHub.API.Presentation.ExceptionHandling;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -294,6 +293,16 @@ builder.Services.AddScoped<IValidator<TotpDisableRequest>, TotpDisableRequestVal
 builder.Services.AddScoped<IValidator<TotpRecoveryCodesRegenerateRequest>, TotpRecoveryCodesRegenerateRequestValidator>();
 builder.Services.AddScoped<IValidator<UpdateMyProfileRequest>, UpdateMyProfileRequestValidator>();
 builder.Services.AddScoped<IValidator<ContactUsRequest>, ContactUsRequestValidator>();
+builder.Services.AddScoped<IValidator<MfaAccountRecoveryRequest>, MfaAccountRecoveryRequestValidator>();
+builder.Services.AddScoped<IValidator<MfaAccountRecoveryVerifyRequest>, MfaAccountRecoveryVerifyRequestValidator>();
+builder.Services.AddScoped<IValidator<MfaAccountRecoveryCompleteRequest>, MfaAccountRecoveryCompleteRequestValidator>();
+builder.Services.AddScoped<IValidator<MfaAccountRecoveryEnrollmentStartRequest>, MfaAccountRecoveryEnrollmentStartRequestValidator>();
+builder.Services.AddScoped<IValidator<MfaAccountRecoveryExternalStartRequest>, MfaAccountRecoveryExternalStartRequestValidator>();
+builder.Services.AddScoped<IValidator<DisconnectExternalLoginRequest>, DisconnectExternalLoginRequestValidator>();
+builder.Services.AddScoped<IValidator<CreateRoleRequest>, CreateRoleRequestValidator>();
+builder.Services.AddScoped<IValidator<UpdateRoleRequest>, UpdateRoleRequestValidator>();
+builder.Services.AddScoped<IValidator<RoleAssignmentRequest>, RoleAssignmentRequestValidator>();
+builder.Services.AddScoped<IValidator<SetRolePermissionsRequest>, SetRolePermissionsRequestValidator>();
 
 builder.Services.AddHttpContextAccessor();
 
@@ -332,6 +341,13 @@ builder.Services.AddRateLimiter(options =>
         RateLimitPartition.GetFixedWindowLimiter(
             GetClientIp(context),
             _ => CreateIpWindow(30, TimeSpan.FromMinutes(5))));
+
+    // The public contact form sends two emails per accepted request. Keep this
+    // policy deliberately stricter than authenticated security operations.
+    options.AddPolicy("contact-us-ip", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            GetClientIp(context),
+            _ => CreateIpWindow(5, TimeSpan.FromMinutes(10))));
 
     options.OnRejected = async (context, cancellationToken) =>
     {
@@ -408,16 +424,16 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddControllers(options => options.Filters.AddService<FluentValidationActionFilter>());
 
-// TEMPORARILY DISABLED: Global exception handling will be investigated separately.
-// builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-// TEMPORARILY DISABLED: Global exception handling will be investigated separately.
-// app.UseExceptionHandler();
+// Keep the exception handler outermost so failures in downstream middleware
+// and controller execution use the same non-sensitive Problem Details response.
+app.UseExceptionHandler();
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
