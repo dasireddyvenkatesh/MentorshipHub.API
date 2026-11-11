@@ -1,4 +1,4 @@
-﻿namespace MentorshipHub.API.Application.Interfaces.Commom
+﻿namespace Xqare.Api.Application.Interfaces.Commom
 {
     public interface IPublicIdService
     {

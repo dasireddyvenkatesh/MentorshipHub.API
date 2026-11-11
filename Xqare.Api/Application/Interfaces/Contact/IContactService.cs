@@ -1,6 +1,6 @@
-﻿using MentorshipHub.API.Application.DTO.ContactUs;
+﻿using Xqare.Api.Application.DTO.ContactUs;
 
-namespace MentorshipHub.API.Application.Interfaces.Contact
+namespace Xqare.Api.Application.Interfaces.Contact
 {
     public interface IContactService
     {

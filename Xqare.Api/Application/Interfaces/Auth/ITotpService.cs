@@ -1,5 +1,5 @@
-using MentorshipHub.API.Application.DTO.Auth;
-namespace MentorshipHub.API.Application.Interfaces.Auth
+using Xqare.Api.Application.DTO.Auth;
+namespace Xqare.Api.Application.Interfaces.Auth
 {
     public interface ITotpService
     {
