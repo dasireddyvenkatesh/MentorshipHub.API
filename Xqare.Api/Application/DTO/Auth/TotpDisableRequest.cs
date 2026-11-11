@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace MentorshipHub.API.Application.DTO.Auth
+namespace Xqare.Api.Application.DTO.Auth
 {
     public sealed class TotpDisableRequest
     {
