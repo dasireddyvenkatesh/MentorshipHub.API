@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 
-namespace MentorshipHub.API.Presentation.Authorization
+namespace Xqare.Api.Presentation.Authorization
 {
     public sealed class PermissionPolicyProvider : DefaultAuthorizationPolicyProvider
     {

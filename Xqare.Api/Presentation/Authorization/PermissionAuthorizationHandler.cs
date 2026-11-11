@@ -1,8 +1,8 @@
-using MentorshipHub.API.Enities;
+using Xqare.Api.Enities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
-namespace MentorshipHub.API.Presentation.Authorization
+namespace Xqare.Api.Presentation.Authorization
 {
     public sealed class PermissionAuthorizationHandler
         : AuthorizationHandler<PermissionRequirement>
