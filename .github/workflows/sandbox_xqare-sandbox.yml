@@ -24,10 +24,10 @@ jobs:
           dotnet-version: '10.x'
 
       - name: Build with dotnet
-        run: dotnet build Xqare.Api.slnx --configuration Release
+        run: dotnet build --configuration Release
 
       - name: dotnet publish
-        run: dotnet publish Xqare.Api/Xqare.Api.csproj -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -51,9 +51,9 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_64FDA6D358F94EA39B67C638B01C9563 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_C640CFFF4FB64DFB8A0478A8C8F8D1FF }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3ED596971F3045F78AED14AD18B4B844 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_56BE58C4CD244626A4AB1325E2F862C7 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_2881500C26AB484BB525533060431772 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_D4A246502E9B4002BBCFB619A1393256 }}
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
